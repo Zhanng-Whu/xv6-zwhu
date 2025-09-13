@@ -25,6 +25,8 @@ $IMAGE_NAME /bin/bash
 
 qemu : 7.2.0
 
+ps:qemu的版本问题可能与国内源有关，可以选择使用源码编译 具体步骤查看这里:https://blog.csdn.net/weixin_43793731/article/details/128909831
+
 镜像OS : ubuntu22.04
 
-[阅读第一章](docs/chapter1.md)
+[阅读第一讲](docs/chapter1.md)
