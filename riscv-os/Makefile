@@ -1,33 +1,24 @@
 K=kernel
 U=user
+S=scripts
+I=include
 
-OBJS = \
-  $K/entry.o \
-  $K/start.o 
-	
-# riscv64-unknown-elf- or riscv64-linux-gnu-
-# perhaps in /opt/riscv/bin
+B=boot
+F=fs
+M=m
+P=proc
+T=trap
+N=net
 
-# 下面那一大tuo都是为了自动检测工具链前缀
-# 如果你知道你电脑里面有 那直接这只就可以
+# --- 1. 自动发现内核源文件并生成目标文件列表 ---
+KSRCS_C := $(wildcard $(K)/**/*.c)   # 查找kernel/下所有子目录中的.c文件
+KSRCS_S := $(wildcard $(K)/**/*.S)   # 查找kernel/下所有子目录中的.S文件
 
+# 将找到的.c和.S文件名列表，转换成对应的.o文件名列表
+KOBJS_C := $(KSRCS_C:.c=.o)
+KOBJS_S := $(KSRCS_S:.S=.o)
+OBJS    := $(KOBJS_C) $(KOBJS_S)
 
-
-# Try to infer the correct TOOLPREFIX if not set
-# ifndef TOOLPREFIX
-# TOOLPREFIX := $(shell if riscv64-unknown-elf-objdump -i 2>&1 | grep 'elf64-big' >/dev/null 2>&1; \
-# 	then echo 'riscv64-unknown-elf-'; \
-# 	elif riscv64-elf-objdump -i 2>&1 | grep 'elf64-big' >/dev/null 2>&1; \
-# 	then echo 'riscv64-elf-'; \
-# 	elif riscv64-linux-gnu-objdump -i 2>&1 | grep 'elf64-big' >/dev/null 2>&1; \
-# 	then echo 'riscv64-linux-gnu-'; \
-# 	elif riscv64-unknown-linux-gnu-objdump -i 2>&1 | grep 'elf64-big' >/dev/null 2>&1; \
-# 	then echo 'riscv64-unknown-linux-gnu-'; \
-# 	else echo "***" 1>&2; \
-# 	echo "*** Error: Couldn't find a riscv64 version of GCC/binutils." 1>&2; \
-# 	echo "*** To turn off this error, run 'gmake TOOLPREFIX= ...'." 1>&2; \
-# 	echo "***" 1>&2; exit 1; fi)
-# endif
 
 QEMU = qemu-system-riscv64
 TOOLPREFIX = riscv64-unknown-elf-
@@ -63,18 +54,27 @@ ifneq ($(shell $(CC) -dumpspecs 2>/dev/null | grep -e '[^f]nopie'),)
 CFLAGS += -fno-pie -nopie
 endif
 
+CFLAGS += -I$(I)
+
 LDFLAGS = -z max-page-size=4096
 
-$K/kernel: $(OBJS) $K/kernel.ld
-	$(LD) $(LDFLAGS) -T $K/kernel.ld -o $K/kernel $(OBJS) 
-	$(OBJDUMP) -S $K/kernel > $K/kernel.asm
-	$(OBJDUMP) -t $K/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $K/kernel.sym
 
-$K/%.o: $K/%.S
-	$(CC) -g -c -o $@ $<
+$(K)/kernel: $(OBJS) $(S)/kernel.ld
+	$(LD) $(LDFLAGS) -T $(S)/kernel.ld -o $(K)/kernel $(OBJS)
+	$(OBJDUMP) -S $(K)/kernel > $(K)/kernel.asm
+	$(OBJDUMP) -t $(K)/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $(K)/kernel.sym
+# --- 4. 更新编译规则，使其更通用 ---
+%.o: %.S
+	$(CC) $(CFLAGS) -c -o $@ $<
 
-tags: $(OBJS)
-	etags kernel/*.S kernel/*.c
+%.o: %.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+
+# --- 5. 更新 etags 规则 ---
+tags: $(KSRCS_C) $(KSRCS_S) $(I)/*.h
+	etags $(KSRCS_C) $(KSRCS_S) $(I)/*.h
+
 
 ULIB = $U/ulib.o $U/usys.o $U/printf.o $U/umalloc.o
 
@@ -95,8 +95,10 @@ $U/_forktest: $U/forktest.o $(ULIB)
 	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $U/_forktest $U/forktest.o $U/ulib.o $U/usys.o
 	$(OBJDUMP) -S $U/_forktest > $U/forktest.asm
 
-mkfs/mkfs: mkfs/mkfs.c $K/fs.h $K/param.h
-	gcc -I. -o mkfs/mkfs mkfs/mkfs.c
+mkfs/mkfs: mkfs/mkfs.c $(I)/fs.h $(I)/param.h
+	gcc -I$(I) -o mkfs/mkfs mkfs/mkfs.c
+
+
 
 # Prevent deletion of intermediate files, e.g. cat.o, after first build, so
 # that disk image changes after first build are persistent until clean.  More
@@ -104,39 +106,22 @@ mkfs/mkfs: mkfs/mkfs.c $K/fs.h $K/param.h
 # http://www.gnu.org/software/make/manual/html_node/Chained-Rules.html
 .PRECIOUS: %.o
 
-UPROGS=\
-	$U/_cat\
-	$U/_echo\
-	$U/_forktest\
-	$U/_grep\
-	$U/_init\
-	$U/_kill\
-	$U/_ln\
-	$U/_ls\
-	$U/_mkdir\
-	$U/_rm\
-	$U/_sh\
-	$U/_stressfs\
-	$U/_usertests\
-	$U/_grind\
-	$U/_wc\
-	$U/_zombie\
-	$U/_logstress\
-	$U/_forphan\
-	$U/_dorphan\
+UPROGS=
+	
 
-fs.img: mkfs/mkfs README $(UPROGS)
-	mkfs/mkfs fs.img README $(UPROGS)
+fs.img: mkfs/mkfs  $(UPROGS)
+	mkfs/mkfs fs.img $(UPROGS)
 
--include kernel/*.d user/*.d
+DEPS :=  $(wildcard $(K)/*.d) $(wildcard $(K)/**/*.d) $(wildcard $(U)/*.d)
+-include $(DEPS)
 
-clean: 
-	rm -f *.tex *.dvi *.idx *.aux *.log *.ind *.ilg \
-	*/*.o */*.d */*.asm */*.sym \
-	$K/kernel fs.img \
-	mkfs/mkfs .gdbinit \
-        $U/usys.S \
-	$(UPROGS)
+clean:
+	rm -f $(K)/kernel $(K)/kernel.asm $(K)/kernel.sym mkfs/mkfs fs.img .gdbinit
+	rm -f $(UPROGS) $(addsuffix .asm,$(UPROGS)) $(addsuffix .sym,$(UPROGS))
+# 使用 OBJS 列表精确删除所有内核目标文件和依赖文件
+	rm -f $(OBJS) $(OBJS:.o=.d)
+# 清理用户程序的目标文件和依赖文件
+	rm -f $(U)/*.o $(U)/*.d
 
 # try to generate a unique GDB port
 GDBPORT = $(shell expr `id -u` % 5000 + 25000)

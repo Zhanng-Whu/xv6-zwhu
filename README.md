@@ -29,4 +29,23 @@ ps:qemu的版本问题可能与国内源有关，可以选择使用源码编译 
 
 镜像OS : ubuntu22.04
 
+同时这里对xv6的文件目录进行了一些更改，最终结果如下:
+
+| 文件夹名称    | 文件内容介绍       |
+| ------------- | ------------------ |
+| kernel        | 内核相关的文件     |
+| kernel/boot   | 内核启动相关的文件 |
+| kernel/driver | 驱动文件           |
+| kernel/lib    | 内核标准库         |
+| kernel/trap   | 内核中中断相关文件 |
+| kernel/mm     | 内存管理文件       |
+| kernel/proc   | 进程管理文件       |
+| include       | 各种头文件         |
+| scripts       | 脚本文件           |
+
+为此，需要更改一些Makefile的内容，根据AI暴改，不保证后续测试稳定性。
+
+
+
 [阅读第一讲](docs/chapter1.md)
+

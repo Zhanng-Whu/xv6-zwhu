@@ -1,14 +1,13 @@
-#include "types.h"
-#include "param.h"
-#include "memlayout.h"
-#include "riscv.h"
-#include "defs.h"
+#include "include/types.h"
+#include "include/param.h"
+#include "include/memlayout.h"
+#include "include/riscv.h"
+#include "include/defs.h"
 
 void main();
-void timerinit();
 
-// entry.S needs one stack per CPU.
-__attribute__ ((aligned (16))) char stack0[4096 * NCPU];
+// 分配3 * 4096字节的栈空间
+__attribute__ ((aligned (16))) char stack0[4096 * 3];
 
 // entry.S jumps here in machine mode on stack0.
 void
@@ -28,9 +27,10 @@ start()
   w_satp(0);
 
   // delegate all interrupts and exceptions to supervisor mode.
+
   w_medeleg(0xffff);
   w_mideleg(0xffff);
-  w_sie(r_sie() | SIE_SEIE | SIE_STIE);
+  w_sie(r_sie() | SIE_SEIE);
 
   // configure Physical Memory Protection to give supervisor mode
   // access to all of physical memory.
@@ -38,7 +38,7 @@ start()
   w_pmpcfg0(0xf);
 
   // ask for clock interrupts.
-  timerinit();
+  // timerinit();
 
   // keep each CPU's hartid in its tp register, for cpuid().
   int id = r_mhartid();
@@ -46,21 +46,4 @@ start()
 
   // switch to supervisor mode and jump to main().
   asm volatile("mret");
-}
-
-// ask each hart to generate timer interrupts.
-void
-timerinit()
-{
-  // enable supervisor-mode timer interrupts.
-  w_mie(r_mie() | MIE_STIE);
-  
-  // enable the sstc extension (i.e. stimecmp).
-  w_menvcfg(r_menvcfg() | (1L << 63)); 
-  
-  // allow supervisor to use stimecmp and time.
-  w_mcounteren(r_mcounteren() | 2);
-  
-  // ask for the very first timer interrupt.
-  w_stimecmp(r_time() + 1000000);
 }
