@@ -199,6 +199,8 @@ call start
 
 ```
 
+这里有一个小知识点，汇编里面的函数，如果没有.global等价于是C语言里面的static，其可见域只在当前文件中。
+
 - 进入start.c，从机器模式转换到监督者模式 这里可以看一下是怎么改变机器状态的？
 
 先来了解一下 M S U分别是什么作用？以及 mret, sret 和 uret
@@ -563,7 +565,7 @@ start()
 
 他们用来区分各个地址的开头和结束。
 
-### 任务2。
+### 任务2
 
 我们回到本章的任务：确定最小启动流程，并且输出Hello OS。
 
@@ -697,7 +699,7 @@ start()
   - 配置中断
   - 配置uart
 
-  没了，对于我们需要输出一个内容，只需要这么多。
+  没了，对于我们初始化一个串口，只需要这么多。
 
 ### 任务3
 
@@ -769,3 +771,150 @@ start()
 }
 ```
 
+### 任务4
+
+对于链接文件，基本没有什么需要修改的，直接照抄即可，唯一一个很抽象的点就是这里：
+
+```ld
+.text : {
+    kernel/boot/entry.o(_entry)
+    *(.text .text.*)
+    . = ALIGN(0x1000);
+    _trampoline = .;
+    *(trampsec)
+    . = ALIGN(0x1000);
+    ASSERT(. - _trampoline == 0x1000, "error: trampoline larger than one page");
+    PROVIDE(etext = .);
+  }
+```
+
+
+
+这里的trampsec是在trampoline.S中用来实现用户态到内核态转换的代码中的一个代码段，由于我之前没有用到这个文件，所以自然而然的就没有把他包括进来，结果就发生了一个很抽象的错：
+
+```shell
+root@archlinux:/workspace# make qemu
+
+riscv64-unknown-elf-ld -z max-page-size=4096 -T scripts/kernel.ld -o kernel/kernel kernel/boot/main.o kernel/boot/start.o kernel/boot/entry.o
+
+riscv64-unknown-elf-ld: error: trampoline larger than one page
+
+make: *** [Makefile:63: kernel/kernel] Error 1
+```
+
+我一看，空代码段怎么会超过一页呢？
+
+结果一查才知道，由于代码段为空，当前的位置和`_trampoline`是重合的... 所以这里页对齐是压根不用动的...
+
+### 任务5 
+
+想起来之前写32的时候，把putchar重定向到uart_write上面，就可以用printf直接输出到串口上来调。
+
+先来看一下寄存器的设置
+
+```c
+#define RHR 0                 
+#define THR 0                 
+#define IER 1                 
+#define IER_RX_ENABLE (1<<0)
+#define IER_TX_ENABLE (1<<1)
+#define FCR 2                 
+#define FCR_FIFO_ENABLE (1<<0)
+#define FCR_FIFO_CLEAR (3<<1) 
+#define ISR 2                 
+#define LCR 3                 
+#define LCR_EIGHT_BITS (3<<0)
+#define LCR_BAUD_LATCH (1<<7) 
+#define LSR 5                 
+#define LSR_RX_READY (1<<0)   
+#define LSR_TX_IDLE (1<<5)    
+```
+
+- RHR 和 THR ，数据端口，用于数据的实际收发， 同时用于发送和接受
+- IER Interrupt enable register, 包含两位
+  - **`IER_RX_ENABLE` (第0位)**: 如果置1，当UART接收到一个字符后，会产生一个“接收就绪”中断。xv6用这个中断来唤醒正在等待控制台输入的进程（如shell）。
+  - **`IER_TX_ENABLE` (第1位)**: 如果置1，当UART发送完一个字符、发送器变为空闲时，会产生一个“发送就绪”中断。
+
+-  `FCR` / `ISR` 
+
+写入的时候是FIFO Control Register，控制FIFO的硬件缓冲，有两种写法，
+
+- **`FCR_FIFO_ENABLE` (第0位)**: 开启FIFO功能。
+
+- **`FCR_FIFO_CLEAR` (第1、2位)**: 一个“清空”命令，用于在初始化时清除FIFO缓冲中的任何残留数据。
+
+读取的时候是ISR,当一个UART发生了中断，内核的中断处理程序需要知道**是什么原因**导致的中断。
+
+- LCR
+
+Line Control Register,用来配置串口的波特率等等位
+
+**`LCR_EIGHT_BITS` (第0、1位)**: 设置每个数据帧包含8个数据位，这是最标准/最常用的配置。
+
+**`LCR_BAUD_LATCH` (第7位)**: 这是一个非常特殊的“模式切换”开关。当把这一位置为1时，`IER`和`RHR/THR`这两个寄存器会**临时改变功能**，变成用来设置波特率除数的“锁存器”。驱动程序通过这个“后门”设置好通信速度后，再将该位清零，让寄存器恢复原功能。
+
+- LSR
+
+Line Statue Register,线路状态寄存器
+
+**`LSR_RX_READY` (第0位)**: 这个位为1时，表示 `RHR` 中有一个字节的数据已经准备好，可以被CPU读取了。
+
+**`LSR_TX_IDLE` (第5位)**: 这个位为1时，表示 `THR` 已经空了，并且发送器也处于空闲状态，可以接收下一个要发送的字节了。xv6的`printf`最终调用的`uartputc`函数，就是一个`while`循环，**不停地检查**这个位，直到它变为1，才把字符写入`THR`。
+
+那么就来看到如何实现串口：
+
+首先是串口初始化
+
+```c
+
+void uartinit(void){
+    // 关闭读取中断
+    WriteReg(IER, 0x00);
+
+    // 设置波特率和信息位
+    // 这里是一个常用波特率 38400
+    // 计算方法是 115200 / 3 = 38400
+    // 按照习惯 一次传递一个字节
+    WriteReg(LCR, LCR_BAUD_LATCH);
+    WriteReg(0, 0x03); // LSB
+    WriteReg(1, 0x00); // MSB
+    WriteReg(LCR, LCR_EIGHT_BITS);
+
+    // 启动缓冲区
+    WriteReg(FCR, FCR_FIFO_ENABLE | FCR_FIFO_CLEAR);
+
+    // 开启读写中断 这里先注释掉 需要等后面配置完中断再开启
+    // WriteReg(IER, IER_TX_ENABLE | IER_RX_ENABLE);
+
+}
+```
+
+注意最后要关闭中断，中断的实现在最后面，所以要在后面处理，不然这里callback会有问题。
+
+然后实现两个轮询的输出，内容如下:
+
+```c
+
+void uartinit(void){
+    // 关闭读取中断
+    WriteReg(IER, 0x00);
+
+    // 设置波特率和信息位
+    // 这里是一个常用波特率 38400
+    // 计算方法是 115200 / 3 = 38400
+    // 按照习惯 一次传递一个字节
+    WriteReg(LCR, LCR_BAUD_LATCH);
+    WriteReg(0, 0x03); // LSB
+    WriteReg(1, 0x00); // MSB
+    WriteReg(LCR, LCR_EIGHT_BITS);
+
+    // 启动缓冲区
+    WriteReg(FCR, FCR_FIFO_ENABLE | FCR_FIFO_CLEAR);
+
+    // 开启读写中断 这里先注释掉 需要等后面配置完中断再开启
+    // WriteReg(IER, IER_TX_ENABLE | IER_RX_ENABLE);
+
+}
+```
+
+将其添加到`defs.h`中，并且在main函数中加上对应的配置，完成任务一。
