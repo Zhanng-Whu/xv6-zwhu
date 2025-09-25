@@ -6,6 +6,11 @@
         "riscv.h": "c",
         "proc.h": "c",
         "spinlock.h": "c",
-        "param.h": "c"
+        "param.h": "c",
+        "sleeplock.h": "c",
+        "user.h": "c",
+        "fs.h": "c",
+        "file.h": "c",
+        "types.h": "c"
     }
 }

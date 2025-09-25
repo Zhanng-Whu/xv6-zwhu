@@ -918,3 +918,6 @@ void uartinit(void){
 ```
 
 将其添加到`defs.h`中，并且在main函数中加上对应的配置，完成任务一。
+
+
+

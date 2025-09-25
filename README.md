@@ -47,6 +47,8 @@ ps:qemu的版本问题可能与国内源有关，可以选择使用源码编译 
 
 
 
+
 [阅读第一讲](docs/chapter1.md), 其完整代码储存在fork,boot中。
 
+[阅读第二讲](docs/chapter2.md)
 

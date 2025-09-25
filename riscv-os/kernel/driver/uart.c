@@ -18,19 +18,22 @@
 #define RHR 0                 
 #define THR 0                 
 #define IER 1                 
-#define IER_RX_ENABLE (1<<0)
-#define IER_TX_ENABLE (1<<1)
 #define FCR 2                 
-#define FCR_FIFO_ENABLE (1<<0)
-#define FCR_FIFO_CLEAR (3<<1) 
 #define ISR 2                 
 #define LCR 3                 
+#define LSR 5                 
+#define IER_RX_ENABLE (1<<0)
+#define IER_TX_ENABLE (1<<1)
+#define FCR_FIFO_ENABLE (1<<0)
+#define FCR_FIFO_CLEAR (3<<1) 
 #define LCR_EIGHT_BITS (3<<0)
 #define LCR_BAUD_LATCH (1<<7) 
-#define LSR 5                 
 #define LSR_RX_READY (1<<0)   
 #define LSR_TX_IDLE (1<<5)    
 
+
+extern volatile int panicking; // from printf.c
+extern volatile int panicked; // from printf.c
 
 void uartinit(void){
     // 关闭读取中断
@@ -72,6 +75,24 @@ void uart_puts(char *s){
 }
 
 
+void uartputc_sync(int c)
+{
+  if(panicking == 0)
+    push_off();
+
+  if(panicked){
+    for(;;)
+      ;
+  }
+
+  // wait for Transmit Holding Empty to be set in LSR.
+  while((ReadReg(LSR) & LSR_TX_IDLE) == 0)
+    ;
+  WriteReg(THR, c);
+
+  if(panicking == 0)
+    pop_off();
+}
 
 
 
