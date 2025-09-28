@@ -14,4 +14,5 @@ test:
         ret
 
 spin:
+        call test
         j spin

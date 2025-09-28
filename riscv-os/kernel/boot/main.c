@@ -27,26 +27,28 @@ void test_printf_edge_cases() {
     printf("Empty string: %s\n", "");
 }
 
+extern char end[];
+
+
 void
 main()
 {
 
   consoleinit();
   printfinit();
+  printf("\n");
+  printf("Hello World\n");
+  kinit();    
+  
+  void* tmp = kalloc();
 
-  printf("HelloWorld");
-  printf("%d", INT_MIN);
-
-  test_printf_basic();
-  test_printf_edge_cases();
-
-  clear_screen();
-  goto_xy(10, 5);
-  printf_color(32, "Green Text at (10,5)\n");
-  printf_color(31, "Red Text\n");
-  printf_color(34, "Blue Text\n");
-  printf_color(0, "Default Color Text\n");
-  // 啥都别干
+  
+  printf("kalloc %p\n", tmp);
+  printf("kfree %p\n", tmp);
+  kfree(tmp);
+  printf("double kfree %p\n", tmp);
+  kfree(tmp);
+  
   for(;;)
   ;
 }

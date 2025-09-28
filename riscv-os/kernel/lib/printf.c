@@ -1,9 +1,8 @@
 #include <stdarg.h> 
-#include "include/defs.h"
 #include "include/types.h"
 #include "include/riscv.h"
 #include "include/spinlock.h"
-
+#include "include/defs.h"
 
 
 
@@ -230,7 +229,8 @@ printf("\033[%dm", color);
 void 
 panic(char *c){
     panicking = 1;
-    consputc(digits[0]);
+    printf("\n!!!\npanic:\n");
+    printf("%s\n!!!\n", c);
     panicked = 1;
     for(;;)
     ;

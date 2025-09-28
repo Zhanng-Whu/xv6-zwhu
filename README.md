@@ -50,5 +50,7 @@ ps:qemu的版本问题可能与国内源有关，可以选择使用源码编译 
 
 [阅读第一讲](docs/chapter1.md), 其完整代码储存在fork,boot中。
 
-[阅读第二讲](docs/chapter2.md)
+[阅读第二讲](docs/chapter2.md), 代码在printf分支中。
+
+[阅读第三讲](docs/chapter3.md), 实现了基于bitmap的简单链表的内存管理以及实现了伙伴系统的功能，但是没有接入，在kalloc分支中。 在vm分支中进一步优化物理内存分配和虚拟地址分配。
 

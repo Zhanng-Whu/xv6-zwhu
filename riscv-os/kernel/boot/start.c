@@ -5,6 +5,7 @@
 #include "include/defs.h"
 
 void main();
+void timerinit();
 
 // 分配3 * 4096字节的栈空间
 __attribute__ ((aligned (16))) char stack0[4096 * 3];
@@ -38,7 +39,7 @@ start()
   w_pmpcfg0(0xf);
 
   // ask for clock interrupts.
-  // timerinit();
+  timerinit();
 
   // keep each CPU's hartid in its tp register, for cpuid().
   int id = r_mhartid();
@@ -46,4 +47,22 @@ start()
 
   // switch to supervisor mode and jump to main().
   asm volatile("mret");
+}
+
+
+// ask each hart to generate timer interrupts.
+void
+timerinit()
+{
+  // enable supervisor-mode timer interrupts.
+  w_mie(r_mie() | MIE_STIE);
+  
+  // enable the sstc extension (i.e. stimecmp).
+  w_menvcfg(r_menvcfg() | (1L << 63)); 
+  
+  // allow supervisor to use stimecmp and time.
+  w_mcounteren(r_mcounteren() | 2);
+  
+  // ask for the very first timer interrupt.
+  w_stimecmp(r_time() + 1000000);
 }

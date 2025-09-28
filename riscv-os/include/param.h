@@ -1,3 +1,7 @@
+#ifndef PARAM
+
+#define PARAM
+
 #define NPROC        64  // maximum number of processes
 #define NCPU          8  // maximum number of CPUs
 #define NOFILE       16  // open files per process
@@ -13,3 +17,4 @@
 #define MAXPATH      128   // maximum file path name
 #define USERSTACK    1     // user stack pages
 
+#endif

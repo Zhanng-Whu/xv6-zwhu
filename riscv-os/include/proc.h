@@ -1,4 +1,10 @@
 
+#ifndef PROC
+
+#define PROC
+
+#include <spinlock.h>
+
 struct context {
   uint64 ra;
   uint64 sp;
@@ -18,6 +24,9 @@ struct context {
   uint64 s11;
 };
 
+
+enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+
 // Per-CPU state.
 struct cpu {
 // 这里先不要引入CPU
@@ -25,3 +34,14 @@ struct cpu {
   int noff;                   // Depth of push_off() nesting.
   int intena;                 // Were interrupts enabled before push_off()?
 };
+struct proc{
+  struct spinlock lock;
+  struct proc* parent;
+
+  int pid;
+  int killed;
+
+
+};
+
+#endif

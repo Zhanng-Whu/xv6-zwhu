@@ -1,3 +1,6 @@
+#ifndef MEMLAYOUT
+#define MEMLAYOUT
+
 // Physical memory layout
 
 // qemu -machine virt is set up like this,
@@ -39,12 +42,12 @@
 #define KERNBASE 0x80000000L
 #define PHYSTOP (KERNBASE + 128*1024*1024)
 
-// map the trampoline page to the highest address,
-// in both user and kernel space.
+// 无论是对用户还是对内核
+// 把中断处理的页放在虚拟内存的最高地址
 #define TRAMPOLINE (MAXVA - PGSIZE)
 
-// map kernel stacks beneath the trampoline,
-// each surrounded by invalid guard pages.
+// 映射内核栈堆到较高的虚拟内存空间
+// 这个位置附近是无效的页面
 #define KSTACK(p) (TRAMPOLINE - ((p)+1)* 2*PGSIZE)
 
 // User memory layout.
@@ -57,3 +60,5 @@
 //   TRAPFRAME (p->trapframe, used by the trampoline)
 //   TRAMPOLINE (the same page as in the kernel)
 #define TRAPFRAME (TRAMPOLINE - PGSIZE)
+
+#endif
