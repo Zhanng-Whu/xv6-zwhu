@@ -12,11 +12,6 @@ extern char etext[];
 
 // kernel.ld里面规定的中断向量的入口
 extern char trampoline[];
-
-void kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm);
-int mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm);
-
-
 // 制作一个直接映射的页表
 pagetable_t
 kvmmake(void){
@@ -123,7 +118,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm){
         if((pte = walk(pagetable, a, 1)) == 0)
             return -1;
         
-        // 这里的数据一定是没有被分配的
+
         if(*pte & PTE_V)
             panic("mappages: 重复分配页");
         
@@ -146,4 +141,66 @@ void
 kvminit(void)
 {
   kernel_pagetable = kvmmake();
+}
+
+
+
+// 创建一个空的用户页表
+pagetable_t
+uvmcreate(void){
+    pagetable_t pagetable;
+
+    pagetable = (pagetable_t) kalloc();
+    
+    if(pagetable == 0)
+        return 0;
+    
+    memset(pagetable, 0, PGSIZE);
+    return pagetable;
+}
+
+
+// 切换当前CPU的硬件页表寄存器到内核的页表，并且启用分页
+void
+kvminithart(){
+    // 开启内存屏障
+    sfence_vma();
+
+    // 切换到内核页表
+    w_satp(MAKE_SATP(kernel_pagetable));
+
+    // 刷新TLB中的过期条目
+    sfence_vma();
+}
+
+
+void print_pgtbl(pagetable_t pagetable, int level, int to_level){
+
+    static const char padding[][10] = {"        ", "    ", ""};
+    if(level > 2 || level < 0){
+        return;
+    }
+    printf("%s%d级页表地址 %p\n", padding[level], level, pagetable);
+    if(level <= to_level){
+        return;
+    }
+    uint64 begin = (uint64)pagetable;
+    uint64 end = begin + PGSIZE;
+    for(;begin < end; begin += 8){
+        if(*(uint64*)begin & PTE_V){
+            uint64 pte = *(uint64*)begin;
+            if(level > 0){
+                printf("%s0x%x表项有效,指向0x%x地址\n", padding[level], begin, PTE2PA((uint64)pte));
+                print_pgtbl((pagetable_t)PTE2PA((uint64)pte), level - 1, to_level);
+            }else{
+                printf("%s0x%x表项指向0x%x地址,权限为", padding[level], begin, PTE2PA((uint64)pte));
+                if(pte & PTE_R) printf("R"); else printf("-");
+                if(pte & PTE_W) printf("W"); else printf("-");
+                if(pte & PTE_X) printf("X"); else printf("-");
+                printf("\n");
+            }
+        }
+    }
+
+
 }
