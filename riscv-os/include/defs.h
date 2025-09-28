@@ -32,7 +32,9 @@ void consputc(int c);
 
 void kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm);
 int mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm);
-
+void print_pgtbl(pagetable_t pagetable, int level, int to_level);
+void kvminithart(void);
+void kvminit(void);
 
 
 // proc.c
