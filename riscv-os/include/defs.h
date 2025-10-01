@@ -30,14 +30,38 @@ void consputc(int c);
 
 // vm.c
 
-void kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm);
-int mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm);
-void print_pgtbl(pagetable_t pagetable, int level, int to_level);
-void kvminithart(void);
-void kvminit(void);
+// 内核内存分配的辅助函数, 功能是实现从虚拟地址到物理地址的映射,并且根据perm设置页表项的权限
+// 是基于mapPages实现 但是要求不允许分配失败
+void kVmMap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm);
 
+//分配从内存空间到内核物理地址的映射 
+int mapPages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm);
+
+// 输出整个页表的内容
+void printPgtbl(pagetable_t pagetable, int level, int to_level);
+
+// 启动内存的分页机制
+void kVmInitHart(void);
+
+// 内核虚拟内存的初始化函数
+void kVmInit(void);
+
+// 初始化一个用户虚拟内存页表
+pagetable_t uVmCreate(void);
+
+// 释放整个用户的虚拟内存空间
+void uVmFree(pagetable_t pagetable, uint64 sz);
+
+pte_t* walk(pagetable_t pagetable, uint64 va, int alloc);
+void freePgtbl(pagetable_t pagetable);
+pagetable_t uVmCreate(void);
+void uVmFree(pagetable_t pagetable, uint64 sz);
+void uVmUnmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free); 
+
+void kVmMap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm);
 
 // proc.c
+int cpuid();
 struct cpu* mycpu(void);
 void proc_mapstacks(pagetable_t kpgtbl);
 

@@ -30,6 +30,7 @@ proc_mapstacks(pagetable_t kpgtbl){
       panic("proc_mapstacks: 内核分配进程栈时空间不足分配失败");
     
     uint64 va = KSTACK((int)(p - proc));
-    kvmmap(kpgtbl, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+    kVmMap(kpgtbl, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
   }
 }
+

@@ -83,9 +83,6 @@ freerange(void *pa_start, void *pa_end)
         kfree(p);
     }
     printf("初始化完成\n");
-
-
-
 }
 
 // Free the page of physical memory pointed at by pa,

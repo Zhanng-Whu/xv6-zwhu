@@ -428,3 +428,95 @@ freerange(void *pa_start, void *pa_end)
 ```
 
 接着，对于`kfree`和`kalloc`在分配的时候加入判断来避免`double_free`
+
+```c
+
+
+// Free the page of physical memory pointed at by pa,
+// which normally should have been returned by a
+// call to kalloc().  (The exception is when
+// initializing the allocator; see kinit above.)
+void
+kfree(void *pa)
+{
+  struct run *r;
+
+  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+    panic("kfree");
+
+  // Fill with junk to catch dangling refs.
+  memset(pa, 1, PGSIZE);
+
+  r = (struct run*)pa;
+  if(!list_bit_isset(PAGE_INDEX(pa)))
+    panic("kfree: 重复释放内存");
+
+  list_bit_clear(PAGE_INDEX(pa));
+
+  acquire(&kmem.lock);
+  r->next = kmem.freelist;
+  kmem.freelist = r;
+  release(&kmem.lock);
+}
+
+// Allocate one 4096-byte page of physical memory.
+// Returns a pointer that the kernel can use.
+// Returns 0 if the memory cannot be allocated.
+void *
+kalloc(void)
+{
+  struct run *r;
+
+  acquire(&kmem.lock);
+  r = kmem.freelist;
+
+  if(r)
+    kmem.freelist = r->next;
+  release(&kmem.lock);
+
+  list_bit_set(PAGE_INDEX(r));
+
+  if(r)
+    memset((char*)r, 5, PGSIZE); // fill with junk
+  return (void*)r;
+}
+```
+
+- 如何检测内存泄漏
+
+反正我写不出来。
+
+- 更高效的分配算法
+
+在`buddy.c`下实现了一个伙伴系统的雏形，但是并没有实际接入。
+
+### Task4
+
+1. 分析 walk() 函数的递归遍历：
+
+   1. 如何从虚拟地址提取各级索引？
+      使用了两个宏定义:
+
+      ```c
+      PTE2PA(PTE);
+      PA2PTE(PA);
+      ```
+
+      他们可以实现从PTE中提取对应的物理地址,接着使用递归实现多级页表的查询.
+
+   2. 遇到无效页表项时如何处理？
+      对于walk函数,如果遇到了无效的PTE,根据alloc来进行判断,如果`alloc=1`,那么会默认分配一个新的页面,并且实现上一级的PTE指向对应的物理地址.如果为0,那么会直接返回0.
+
+   3. 遇到无效页表项时如何处理？
+      如上
+
+2. 研究 mappages() 的映射建立
+
+   1. 如何处理地址对齐？
+      强制要求地址对齐,为了实现页式虚拟内存.
+   2. 权限位是如何设置的？
+      通过函数传入的`int perm`来设置对应的对应的有效状态,并且找到对应的页表项的物理地址后还需要判断地址是否可用.
+   3. 映射失败时的清理工作
+      哪有什么清理工作,直接panic了
+
+
