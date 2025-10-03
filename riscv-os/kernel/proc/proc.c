@@ -7,7 +7,7 @@
 
 struct cpu cpus[NCPU];
 
-struct proc proc[NPROC];
+struct PCB PCBs[NPROC];
 
 int cpuid() {
   int id = r_tp();
@@ -23,13 +23,13 @@ mycpu(void){
 
 void 
 proc_mapstacks(pagetable_t kpgtbl){
-  struct proc* p;
-  for(p = proc; p < &proc[NPROC]; p++){
+  struct PCB* p;
+  for(p = PCBs; p < &PCBs[NPROC]; p++){
     char* pa = kalloc();
     if(pa==0)
       panic("proc_mapstacks: 内核分配进程栈时空间不足分配失败");
-    
-    uint64 va = KSTACK((int)(p - proc));
+
+    uint64 va = KSTACK((int)(p - PCBs));
     kVmMap(kpgtbl, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
   }
 }

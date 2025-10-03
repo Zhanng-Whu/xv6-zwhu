@@ -73,11 +73,13 @@ void kVmMap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm){
 // 如果找不到返回0
 pte_t*
 walk(pagetable_t pagetable, uint64 va, int alloc){
+    
     if(va >= MAXVA)
         panic("walk");
     
     for(int level = 2; level > 0; level--){
         
+
         // 找到当VA对应的level级页表项
         pte_t* pte = &pagetable[PX(level, va)];
         

@@ -10,7 +10,6 @@ volatile static int started = 0;
 // start() jumps here in supervisor mode on all CPUs.
 
 
-#define INT_MIN 0x80000000
 
 extern char end[];
 extern pagetable_t kernel_pagetable;
@@ -32,7 +31,6 @@ main()
 
     __sync_synchronize();
     started = 1;
-
   } else {
 
     while(started == 0)

@@ -1,7 +1,7 @@
 #! /bin/bash
 
 IMAGE_NAME=zwhu/riscv:base
-BASE_PATH=/home/zhanng/Documents/GitHub/xv6-zwhu
+BASE_PATH=/home/zhanng/文档/GitHub/xv6-zwhu
 DIR_PATH=xv6-riscv
 
 docker run -it --rm \

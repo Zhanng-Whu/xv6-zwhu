@@ -26,7 +26,7 @@ iinit();         // inode table
 
 
 
-注意这里是先初始化进程表,后初始化中断相关的操作.但是进程管理是第五讲的内容,所以这里先跳过这个部分.
+注意这里是先初始化进程表,后初始化中断相关的操作.但是进程管理是第五讲的内容,可是这里又涉及到进程管理的内容.所以先了解中断的逻辑,在完成中断逻辑后再处理进程相关的逻辑.
 
 关键看到接下来的四个函数的初始化函数:
 
@@ -159,7 +159,7 @@ plicinithart();  // ask PLIC for device interrupts
 
   这里是三个断言,第一个的SPP代表Supervisor Previous Privilege,表示在发生中断前的系统状态是不是内核模式,如果这个是0,说明中断违反了设计的初衷,所以会中断.
 
-  第二个是判断当前的程序是关闭了中断,如果程序关闭中断了还跳到了这个函数,代表有严重的逻辑错误.
+  第二个判断很有意思,他表明了xv6不支持嵌套中断,原因是在发生中断后,硬件会自动关闭中断使能,保证中断不会嵌套发生.
 
   ```c
   
@@ -361,4 +361,271 @@ plicinithart(void)
   // set this hart's S-mode priority threshold to 0.
   *(uint32*)PLIC_SPRIORITY(hart) = 0;
 ```
+
+## 进程初始化与进程调度
+
+### 进程初始化
+
+在这里,接着我们需要实现一些基本的中断处理,比如这里的计时器中断引起的进程调度,所以我们就需要先了解进程运作的基本原理.
+
+```c
+
+// initialize the proc table.
+void
+procinit(void)
+{
+  struct proc *p;
+  
+  initlock(&pid_lock, "nextpid");
+  initlock(&wait_lock, "wait_lock");
+  for(p = proc; p < &proc[NPROC]; p++) {
+      initlock(&p->lock, "proc");
+      p->state = UNUSED;
+      p->kstack = KSTACK((int) (p - proc));
+  }
+}
+```
+
+这里是初始化进程列表, 可以看到这里的作用就是为每一个进程类分配对应的虚拟页表的栈地址,然后设置进程的状态为没有使用.
+
+首先是进程的状态,进程的状态在xv6中定义在`proc.h`中,包含下面这一些:
+
+```c
+enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+```
+
+回忆一下OS的内容,进程一共分为五个状态(暂时不考虑挂起,是否为一个状态在不同的教材中有不同的定义)
+
+![这里写图片描述](./assets/abad09ebc7ac17f942e65d3c2c6cc7ff.png)
+
+这里就是:
+
+- `UNUSED` 表示进程初始化之前,PCB还在空闲PCB列表中的状态.
+- `USED` 表示进程初始化阶段,是一个比较短暂的状态
+- `RUNNABLE` 表示就绪状态
+- `RUNNING` 表示运行状态
+- `SLEEPING` 表示进程挂起
+- `ZOMBIE` 进程执行完成,但是父进程没有调用`wait()`
+
+然后是进程的栈分配,前面已经实现了在内核虚拟空间中实现了从VA到PA的进程栈映射,但是进程来说并不知道自己的栈在哪里,这里在PCB中有一个指针指向这个栈的位置.
+
+### 进程调度
+
+这里是我认为目前为止设计的最巧妙的地方,到这里终于理解了CPU是如何实现进程调度的.
+
+首先来看到进程调度器
+
+```c
+// Per-CPU process scheduler.
+// Each CPU calls scheduler() after setting itself up.
+// Scheduler never returns.  It loops, doing:
+//  - choose a process to run.
+//  - swtch to start running that process.
+//  - eventually that process transfers control
+//    via swtch back to the scheduler.
+void
+scheduler(void)
+{
+  struct proc *p;
+  struct cpu *c = mycpu();
+
+  c->proc = 0;
+  for(;;){
+    // The most recent process to run may have had interrupts
+    // turned off; enable them to avoid a deadlock if all
+    // processes are waiting. Then turn them back off
+    // to avoid a possible race between an interrupt
+    // and wfi.
+    intr_on();
+    intr_off();
+
+    int found = 0;
+    for(p = proc; p < &proc[NPROC]; p++) {
+      acquire(&p->lock);
+      if(p->state == RUNNABLE) {
+        // Switch to chosen process.  It is the process's job
+        // to release its lock and then reacquire it
+        // before jumping back to us.
+        p->state = RUNNING;
+        c->proc = p;
+        swtch(&c->context, &p->context);
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+        found = 1;
+      }
+      release(&p->lock);
+    }
+    if(found == 0) {
+      // nothing to run; stop running on this core until an interrupt.
+      asm volatile("wfi");
+
+    }
+  }
+}
+```
+
+首先的第一个很巧妙的地方是
+
+```c
+    intr_on();
+    intr_off();
+```
+
+关中断不是屏蔽中断,而是延迟中断,这里就是短暂开启一个窗口让OS处理中断.
+
+```c
+	int found = 0;
+    for(p = proc; p < &proc[NPROC]; p++) {
+      acquire(&p->lock);
+      if(p->state == RUNNABLE) {
+        // Switch to chosen process.  It is the process's job
+        // to release its lock and then reacquire it
+        // before jumping back to us.
+        p->state = RUNNING;
+        c->proc = p;
+        swtch(&c->context, &p->context);
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+        found = 1;
+      }
+      release(&p->lock);
+    }
+    if(found == 0) {
+      // nothing to run; stop running on this core until an interrupt.
+      asm volatile("wfi");
+
+    }
+```
+
+接着这里在所有的进程中查找一个准备就绪的,准备运行,看这里的实现:
+
+```c
+c->proc = p;
+swtch(&c->context, &p->context);
+```
+
+CPU里面实际有这样有两个context.
+
+```c
+
+// Per-CPU state.
+struct cpu {
+  struct proc *proc;          // The process running on this cpu, or null.
+  struct context context;     // swtch() here to enter scheduler().
+  int noff;                   // Depth of push_off() nesting.
+  int intena;                 // Were interrupts enabled before push_off()?
+};
+```
+
+一个是proc中.保存了进程的一套寄存器.另一个是context里面直接保存了一套寄存器.`stich`实际上就是把CPU的寄存器保存在前面的那个`old`的context中,而把后面那个context的内容载入到寄存器组中.
+
+```asm
+# Context switch
+#
+#   void swtch(struct context *old, struct context *new);
+# 
+# Save current registers in old. Load from new.	
+
+
+.globl swtch
+swtch:
+        sd ra, 0(a0)
+        sd sp, 8(a0)
+        sd s0, 16(a0)
+        sd s1, 24(a0)
+        sd s2, 32(a0)
+        sd s3, 40(a0)
+        sd s4, 48(a0)
+        sd s5, 56(a0)
+        sd s6, 64(a0)
+        sd s7, 72(a0)
+        sd s8, 80(a0)
+        sd s9, 88(a0)
+        sd s10, 96(a0)
+        sd s11, 104(a0)
+
+        ld ra, 0(a1)
+        ld sp, 8(a1)
+        ld s0, 16(a1)
+        ld s1, 24(a1)
+        ld s2, 32(a1)
+        ld s3, 40(a1)
+        ld s4, 48(a1)
+        ld s5, 56(a1)
+        ld s6, 64(a1)
+        ld s7, 72(a1)
+        ld s8, 80(a1)
+        ld s9, 88(a1)
+        ld s10, 96(a1)
+        ld s11, 104(a1)
+        
+        ret
+
+	
+```
+
+而ret的返回地址是根据`ra`来判断的,这里他就不会直接返回`scheduler()` 中,而是去处理进程对应的程序.
+
+接着,是如何通过计时器中断来实现时间片轮转的呢?
+
+```c
+// Switch to scheduler.  Must hold only p->lock
+// and have changed proc->state. Saves and restores
+// intena because intena is a property of this
+// kernel thread, not this CPU. It should
+// be proc->intena and proc->noff, but that would
+// break in the few places where a lock is held but
+// there's no process.
+void
+sched(void)
+{
+  int intena;
+  struct proc *p = myproc();
+
+  if(!holding(&p->lock))
+    panic("sched p->lock");
+  if(mycpu()->noff != 1)
+    panic("sched locks");
+  if(p->state == RUNNING)
+    panic("sched RUNNING");
+  if(intr_get())
+    panic("sched interruptible");
+
+  intena = mycpu()->intena;
+  swtch(&p->context, &mycpu()->context);
+  mycpu()->intena = intena;
+}
+
+// Give up the CPU for one scheduling round.
+void
+yield(void)
+{
+  struct proc *p = myproc();
+  acquire(&p->lock);
+  p->state = RUNNABLE;
+  sched();
+  release(&p->lock);
+}
+
+```
+
+在确定了中断类型后,会调用`yield`函数,他会上锁,然后更改进程状态, 接着将当前的寄存器状态存回PCB,并且还原到``schedule`的ra,实现继续选择下一个可以用的进程.
+
+如果没有可以使用的进程,那么会将当前的CPU的进程设成0,在中断处理函数中有对这种情况的判断,使得中断时不会实现轮转.
+
+而同时,CPU也会进入一个暂时的休眠状态
+
+```c
+      asm volatile("wfi");
+```
+
+这种状态下即使寄存器中关闭了中断,CPU依然可以接收中断.
+
+
+
+
 

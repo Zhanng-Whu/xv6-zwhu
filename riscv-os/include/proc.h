@@ -34,7 +34,8 @@ struct cpu {
   int noff;                   // Depth of push_off() nesting.
   int intena;                 // Were interrupts enabled before push_off()?
 };
-struct proc{
+
+struct PCB{
   struct spinlock lock;
   struct proc* parent;
 

@@ -74,7 +74,6 @@ freerange(void *pa_start, void *pa_end)
     
     p += meta_sz * PGSIZE;
     
-    printf("初始化完成\n");
     kmem.bitmap = (char*)addr_base;
     
     memset(kmem.bitmap,0xff, meta_sz * PGSIZE); // 先全部标记为已经使用
@@ -82,7 +81,6 @@ freerange(void *pa_start, void *pa_end)
     for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE){
         kfree(p);
     }
-    printf("初始化完成\n");
 }
 
 // Free the page of physical memory pointed at by pa,
