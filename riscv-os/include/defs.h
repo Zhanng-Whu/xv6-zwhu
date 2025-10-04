@@ -2,6 +2,9 @@
 #ifndef DEFS
 #define DEFS
 struct spinlock;
+struct PCB;
+struct cpu;
+struct context;
 
 
 // uart.c
@@ -25,6 +28,8 @@ void consputc(int c);
     void initlock(struct spinlock* lk, char* name);
     void acquire(struct spinlock* lk);
     void release(struct spinlock* lk);
+
+    int holding(struct spinlock* lk);
 
 
 
@@ -64,6 +69,11 @@ void kVmMap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm);
 int cpuid();
 struct cpu* mycpu(void);
 void proc_mapstacks(pagetable_t kpgtbl);
+void procinit(void);
+void yield(void);
+
+
+
 
 // printf.c
 void panic(char *s);
@@ -88,7 +98,24 @@ struct list{
 void bd_init(void* start, void* end);
 
 
+// trap.c
+void trapInit(void);            // 中断 软件初始化
+void trapInitHart(void);        // 中断 硬件初始化 主要是在寄存器中设置中断向量
+void scheduler(void);           // 调度器
 
+// swtch.S
+void swtch(struct context* old, struct context* new);  
+
+
+// plic.c
+void plicInit(void);
+void plicInitHart(void);
+void registerDev(int irq, int priority);
+void unregisterDev(int irq);
+void enableDev(int irq);
+void disableDev(int irq);
+int plicClaim(void);
+void plicComplete(int irq);
 
 // list.c
 void lst_init(struct list*);

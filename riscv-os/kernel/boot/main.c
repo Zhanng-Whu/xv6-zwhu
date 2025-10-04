@@ -20,14 +20,28 @@ main()
 {
 
   if(cpuid() == 0){
+
+    // 输出功能初始化
     consoleinit();
     printfinit();
     printf("\n");
     printf("Hello World\n");
-    
+
+    // 内存初始化
     kinit();
     kVmInit();
     kVmInitHart();
+
+    // 进程初始化
+    procinit();
+
+    // 内核中断初始化
+    trapInit();
+    trapInitHart();
+    
+    // PLIC注册
+    plicInit();
+    plicInitHart();
 
     __sync_synchronize();
     started = 1;
@@ -40,7 +54,6 @@ main()
 
   }
 
-    for(;;)
-    ;
+  scheduler();
 }
 

@@ -625,7 +625,122 @@ yield(void)
 
 这种状态下即使寄存器中关闭了中断,CPU依然可以接收中断.
 
+## 问题
 
+### Task1
 
+1. 时钟中断为什么在M模式产生，却在S模式处理？
+    时钟中断是硬件定时器（通常是内核定时器）产生的中断。在RISC-V架构中，当发生时钟中断时，硬件首先会触发一个中断，并将控制权交给当前运行模式的处理程序。由于时钟中断通常是硬件级别的，所以它是在**M模式**下产生的。这意味着时钟中断是由机器模式的硬件定时器触发的，控制权会交给M模式的中断处理程序。
+    虽然时钟中断是在M模式下产生的，但它通常会被转交给**S模式**来处理。实现的代码在strat.c中:
 
+    ```c
+      // set M Previous Privilege mode to Supervisor, for mret.
+      unsigned long x = r_mstatus();
+      x &= ~MSTATUS_MPP_MASK;
+      x |= MSTATUS_MPP_S;
+      w_mstatus(x);
+    
+    //....
+    
+    
+      // delegate all interrupts and exceptions to supervisor mode.
+      w_medeleg(0xffff);
+      w_mideleg(0xffff);
+      w_sie(r_sie() | SIE_SEIE | SIE_STIE);
+    ```
 
+    这里会将中断的消息转达到S模式下,并且根据trap.c中设置的处理程序的地址跳转到特定的函数下:
+
+    ```c
+    
+    // set up to take exceptions and traps while in the kernel.
+    void
+    trapInitHart(void)
+    {
+      w_stvec((uint64)kernelVec);
+    }
+    ```
+
+2. 如何理解"中断是异步的，异常是同步的"？
+    **中断（Interrupts）**：是由外部事件或外部硬件产生的，它是异步的。异步的意思是**中断发生的时刻和程序的执行流程无关**。换句话说，中断的发生是不确定的，通常是由外部硬件如定时器、输入输出设备等触发的。
+    **异常（Exceptions）**：是由程序执行过程中发生的某些事件引起的，通常与程序本身的运行状态直接相关，它是同步的。同步意味着**异常总是与某个特定的指令执行密切相关**，并且可以在指令流执行时产生。
+
+### Task2
+
+1. 研读 start.c 中的机器模式设置
+    这里已经读过了,不用再解释
+
+2. 分析 kernelvec.S 的上下文切换：
+
+    1. 为什么不保存所有寄存器？
+        只用保存被调用者保存寄存器和返回相关的寄存器,并不是所有的寄存器在任务切换时都发生变化，因此不需要保存每个寄存器，减少了不必要的工作。
+
+3. 理解 trap.c 的中断分发：
+
+    1. 中断处理中的重入问题如何解决？
+        实际上,对于xv6是屏蔽所有的中断嵌套,在发生中断后,硬件设置会自动禁止中断,内容在trap.c中有显示:
+
+        ```c
+        
+          if((sstatus & SSTATUS_SPP) == 0)
+            panic("kerneltrap: not from supervisor mode");
+          if(intr_get() != 0)
+            panic("kerneltrap: interrupts enabled");
+        
+        ```
+
+        实际上,xv6中没有考虑中断的等级的问题.
+
+    2. 中断处理时间过长会有什么后果？
+        首先是中断堆积,其次会导致中断丢失.
+
+### Task6
+
+我感觉很诡异,明明是讲中断的为什么这里变成了处理异常的?
+
+xv6的大部分异常在编译的时候都不会让你通过, 因为加入了特定的参数:
+
+```shell
+riscv64-unknown-elf-gcc -Wall -Werror -Wno-unknown-attributes -O -fno-omit-frame-pointer -ggdb -gdwarf-2 -MD -mcmodel=medany -ffreestanding -fno-common -nostdlib -fno-builtin-strncpy -fno-builtin-strncmp -fno-builtin-strlen -fno-builtin-memset -fno-builtin-memmove -fno-builtin-memcmp -fno-builtin-log -fno-builtin-bzero -fno-builtin-strchr -fno-builtin-exit -fno-builtin-malloc -fno-builtin-putc -fno-builtin-free -fno-builtin-memcpy -Wno-main -fno-builtin-printf -fno-builtin-fprintf -fno-builtin-vprintf -I. -fno-stack-protector -fno-pie -no-pie   -c -o kernel/main.o kernel/main.c
+kernel/main.c: In function 'main':
+kernel/main.c:47:12: error: division by zero [-Werror=div-by-zero]
+   47 |   int a = 1/ 0;
+      |            ^
+kernel/main.c:47:7: error: unused variable 'a' [-Werror=unused-variable]
+   47 |   int a = 1/ 0;
+      |       ^
+At top level:
+cc1: note: unrecognized command-line option '-Wno-unknown-attributes' may have been intended to silence earlier diagnostics
+```
+
+而且想要引入异常处理,最好是在后面引入用户进程后进行处理,这里往后面放一下.
+
+原因就是这里:
+
+```c
+        #
+        # low-level code to handle traps from user space into
+        # the kernel, and returns from kernel to user.
+        #
+        # the kernel maps the page holding this code
+        # at the same virtual address (TRAMPOLINE)
+        # in user and kernel space so that it continues
+        # to work when it switches page tables.
+        # kernel.ld causes this code to start at 
+        # a page boundary.
+        #
+
+```
+
+## 后记
+
+- 如何实现一个满足实时性的中断系统?
+    很简单,需要可以通过这几个地方实现:
+
+    ```c
+    *(uint32*)PLIC_SPRIORITY(hart) = 0;
+    *(uint32*)(PLIC + UART0_IRQ*4) = 1;
+    intr_on();
+    ```
+
+    在中断的上下文保存完成后,修改当前中断的屏蔽等级,将屏蔽等级设置为当前中断的优先度,保证高于这个优先度的都可以打断当前中断,然后开启中断即可.这个过程中要保证中断处理程序的时候的上锁等等操作,避免响应中断而破坏了当前程序的正确性.
