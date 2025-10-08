@@ -43,9 +43,6 @@ main()
     plicInit();
     plicInitHart();
 
-    userInit();
-    
-
     __sync_synchronize();
     started = 1;
   } else {

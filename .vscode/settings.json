@@ -1,6 +1,5 @@
 {
   "files.associations": {
-    "*.dbclient-js": "javascript",
     "defs.h": "c",
     "stat.h": "c",
     "memlayout.h": "c",
@@ -14,8 +13,7 @@
     "file.h": "c",
     "types.h": "c",
     "random": "c",
-    "list": "c",
-    "fcntl.h": "c"
+    "list": "c"
   },
   "C_Cpp_Runner.cCompilerPath": "gcc",
   "C_Cpp_Runner.cppCompilerPath": "g++",
