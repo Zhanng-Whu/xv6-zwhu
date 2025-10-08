@@ -92,3 +92,32 @@ void kernelTrap(void){
   printf("Hello");
 
 }
+
+void
+userTrap(void){
+  struct PCB* p = myproc();
+
+  int which_dev = 0;
+
+  if((r_sstatus() & SSTATUS_SPP) != 0)
+    panic("usertrap: 中断不来自于用户态");
+
+
+  // 进入内核态后 设置内核的中断入口
+  w_stvec((uint64)kernelVec);
+
+  
+  p->trapframe->epc = r_sepc();
+
+  if(r_scause() == 8){
+
+  }else if((which_dev = devIntr()) != 0){
+
+  }else {
+    printf("userTrap(): 未知中断类型 scause=%p pid=%d\n", r_scause(), p->pid);
+    printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+    setKilled(p);
+  }
+
+}
+

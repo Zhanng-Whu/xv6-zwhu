@@ -19,9 +19,6 @@ initlock(struct spinlock* lk, char* name){
     lk->cpu = 0;
 }
 
-
-
-
 void 
 acquire(struct spinlock* lk){
     push_off(); // 关闭中断 避免死锁

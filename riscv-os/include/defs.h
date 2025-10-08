@@ -68,10 +68,12 @@ void kVmMap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm);
 // proc.c
 int cpuid();
 struct cpu* mycpu(void);
+struct PCB* myproc(void);
 void proc_mapstacks(pagetable_t kpgtbl);
 void procinit(void);
 void yield(void);
-
+void setKilled(struct PCB* p);
+void userInit(void);
 
 
 
@@ -102,6 +104,8 @@ void bd_init(void* start, void* end);
 void trapInit(void);            // 中断 软件初始化
 void trapInitHart(void);        // 中断 硬件初始化 主要是在寄存器中设置中断向量
 void scheduler(void);           // 调度器
+void userTrap(void);            // 用户中断处理地址
+
 
 // swtch.S
 void swtch(struct context* old, struct context* new);  
