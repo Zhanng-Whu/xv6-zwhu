@@ -78,7 +78,7 @@ tags: $(KSRCS_C) $(KSRCS_S) $(I)/*.h
 
 ULIB = $U/ulib.o $U/usys.o $U/printf.o $U/umalloc.o
 
-_%: %.o $(ULIB) $U/user.ld
+$U/_%: $U/%.o $(ULIB) $U/user.ld
 	$(LD) $(LDFLAGS) -T $U/user.ld -o $@ $< $(ULIB)
 	$(OBJDUMP) -S $@ > $*.asm
 	$(OBJDUMP) -t $@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $*.sym
@@ -106,8 +106,7 @@ mkfs/mkfs: mkfs/mkfs.c $(I)/fs.h $(I)/param.h
 # http://www.gnu.org/software/make/manual/html_node/Chained-Rules.html
 .PRECIOUS: %.o
 
-UPROGS=
-	
+UPROGS=\
 
 fs.img: mkfs/mkfs  $(UPROGS)
 	mkfs/mkfs fs.img $(UPROGS)
