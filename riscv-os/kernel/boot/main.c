@@ -34,18 +34,39 @@ main()
   consoleinit();
   printfinit();
 
-  printf("HelloWorld");
-  printf("%d", INT_MIN);
+  // printf("arr address is %x\n", arr);
+  // for(int i = 0; i < 1000; i++) {
+  //   if(arr[i] != 0){
+  //     printf("arr[%d] = %d\n", i, arr[i]);
+  //     arr[i] = i;
+  //   }
+  // }
+  extern char sbss[];
+  extern char bss[];
+  extern char ebss[];
 
-  test_printf_basic();
-  test_printf_edge_cases();
+  int a = ebss - sbss;
+  printf("\n\n\n.ebss begin = 0x%x, .bss begin =0x%x, .bss end = 0x%x\n", &sbss, &bss, &ebss);
+  printf(".bss size = 0x%x bytes\n", a);
+  printf("Begin to check bss segment...\n\n\n");
 
-  clear_screen();
-  goto_xy(10, 5);
-  printf_color(32, "Green Text at (10,5)\n");
-  printf_color(31, "Red Text\n");
-  printf_color(34, "Blue Text\n");
-  printf_color(0, "Default Color Text\n");
+  // for(char *p = sbss; p < ebss; p++) {
+  //   if(*p != 0) {
+  //     printf("bss segment not zeroed at address %x, value = %d\n", p, *p);
+  //   }
+  // }
+
+  // printf("%d", INT_MIN);
+
+  // test_printf_basic();
+  // test_printf_edge_cases();
+
+  // clear_screen();
+  // goto_xy(10, 5);
+  // printf_color(32, "Green Text at (10,5)\n");
+  // printf_color(31, "Red Text\n");
+  // printf_color(34, "Blue Text\n");
+  // printf_color(0, "Default Color Text\n");
   // 啥都别干
   for(;;)
   ;

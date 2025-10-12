@@ -7,7 +7,7 @@
 void main();
 
 // 分配3 * 4096字节的栈空间
-__attribute__ ((aligned (16))) char stack0[4096 * 3];
+__attribute__ ((aligned (16))) char stack0[4096 * 4];
 
 // entry.S jumps here in machine mode on stack0.
 void

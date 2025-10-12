@@ -35,11 +35,20 @@ SECTIONS
 							
   }
 
+  
   .bss : {
+    PROVIDE(sbss = .);
     . = ALIGN(16);
     *(.sbss .sbss.*) /* do not need to distinguish this from .bss */
+    
     . = ALIGN(16);
+
+    PROVIDE(bss = .);
+    
     *(.bss .bss.*)
+
+    PROVIDE(ebss = .);
+
   }
 
   PROVIDE(end = .);
