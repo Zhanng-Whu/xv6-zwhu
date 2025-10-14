@@ -106,7 +106,8 @@ mkfs/mkfs: mkfs/mkfs.c $(I)/fs.h $(I)/param.h
 # http://www.gnu.org/software/make/manual/html_node/Chained-Rules.html
 .PRECIOUS: %.o
 
-UPROGS=\
+UPROGS=
+	
 
 fs.img: mkfs/mkfs  $(UPROGS)
 	mkfs/mkfs fs.img $(UPROGS)
