@@ -78,7 +78,7 @@ tags: $(KSRCS_C) $(KSRCS_S) $(I)/*.h
 
 ULIB = $U/ulib.o $U/usys.o $U/printf.o $U/umalloc.o
 
-$U/_%: $U/%.o $(ULIB) $U/user.ld
+_%: %.o $(ULIB) $U/user.ld
 	$(LD) $(LDFLAGS) -T $U/user.ld -o $@ $< $(ULIB)
 	$(OBJDUMP) -S $@ > $*.asm
 	$(OBJDUMP) -t $@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $*.sym

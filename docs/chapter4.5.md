@@ -447,6 +447,29 @@ struct inode {
 
 **`+1` (间接指针)**: 数组的最后一个元素是一个**一级间接指针**。它指向的不是一个数据块，而是**另一个磁盘块**。这个“间接块”本身不存储文件内容，而是存储了**另外一批数据块的地址**。通过这种方式，xv6可以支持比直接指针能表示的更大尺寸的文件。
 
+处理这里的`inode`结构体,还有一个`dnode`结构体,表示inode存储在磁盘中的格式,也就是你可以直接用指针赋值的方法将磁盘的内容按照dnode的格式解读.
+
+```c
+// On-disk inode structure
+struct dinode {
+  short type;           // File type
+  short major;          // Major device number (T_DEVICE only)
+  short minor;          // Minor device number (T_DEVICE only)
+  short nlink;          // Number of links to inode in file system
+  uint size;            // Size of file (bytes)
+  uint addrs[NDIRECT+1];   // Data block addresses
+};
+```
+
+接下来看到文件系统里面最关键的几个函数.
+
+```c
+struct inode* iget(uint dev, uint inum);
+void iput(struct inode *ip);
+```
+
+获取和释放内存中的`inode`的引用.
+
 ### File table
 
 ```c
@@ -1052,3 +1075,499 @@ void begin_op();
 ```
 
 这一句表示开始文件操作
+
+然后就是一个`if-else`
+
+```c
+ if(omode & O_CREATE){
+    ip = create(path, T_FILE, 0, 0);
+    if(ip == 0){
+      end_op();
+      return -1;
+    }
+  } else {
+    if((ip = namei(path)) == 0){
+      end_op();
+      return -1;
+    }
+    ilock(ip);
+    if(ip->type == T_DIR && omode != O_RDONLY){
+      iunlockput(ip);
+      end_op();
+      return -1;
+    }
+  }
+```
+
+这一段的逻辑是:
+
+1. 如果创建访问里面有创建的权限,那么直接创建
+2. 如果没有,那么查找有没有这个文件,
+3. 如果没有或者创建失败,那么直接返回,
+4. 上文件锁
+5. 如果文件为文件夹并且文件是只读的,那么直接返回
+
+这里涉及到两个函数,`namei()`和`create`
+
+先来看`create`函数的参数:
+
+```c
+create(path, File_TYPE, major, minor);
+```
+
+1. 首先会沿着`path`查找当前文件的路径
+2. 如果文件已经存在,那么会直接返回文件`inode`
+3. 如果文件不存在,`create`会在目录中创建一个新的`inode`并且在目录中添加一个指向inode的条目,然后返回这个新创建的inode
+4. 如果`create`创建失败,就会直接返回0,
+
+函数功能如下:
+
+```c
+
+static struct inode*
+create(char *path, short type, short major, short minor)
+{
+  struct inode *ip, *dp;
+  char name[DIRSIZ];
+
+  if((dp = nameiparent(path, name)) == 0)
+    return 0;
+
+  ilock(dp);
+
+  if((ip = dirlookup(dp, name, 0)) != 0){
+    iunlockput(dp);
+    ilock(ip);
+    if(type == T_FILE && (ip->type == T_FILE || ip->type == T_DEVICE))
+      return ip;
+    iunlockput(ip);
+    return 0;
+  }
+
+  if((ip = ialloc(dp->dev, type)) == 0){
+    iunlockput(dp);
+    return 0;
+  }
+
+  ilock(ip);
+  ip->major = major;
+  ip->minor = minor;
+  ip->nlink = 1;
+  iupdate(ip);
+
+  if(type == T_DIR){  // Create . and .. entries.
+    // No ip->nlink++ for ".": avoid cyclic ref count.
+    if(dirlink(ip, ".", ip->inum) < 0 || dirlink(ip, "..", dp->inum) < 0)
+      goto fail;
+  }
+
+  if(dirlink(dp, name, ip->inum) < 0)
+    goto fail;
+
+  if(type == T_DIR){
+    // now that success is guaranteed:
+    dp->nlink++;  // for ".."
+    iupdate(dp);
+  }
+
+  iunlockput(dp);
+
+  return ip;
+
+ fail:
+  // something went wrong. de-allocate ip.
+  ip->nlink = 0;
+  iupdate(ip);
+  iunlockput(ip);
+  iunlockput(dp);
+  return 0;
+}
+```
+
+首先是获取文件的父目录的`inode`
+
+这里的dp就是`dir`
+
+```c
+if((dp = nameiparent(path, name)) == 0)
+  return 0;
+ilock(dp);
+```
+
+这里的`namei`和`nameiparent`是文件系统里面的两个重要的接口函数
+
+```c
+
+// Look up and return the inode for a path name.
+// If parent != 0, return the inode for the parent and copy the final
+// path element into name, which must have room for DIRSIZ bytes.
+// Must be called inside a transaction since it calls iput().
+static struct inode*
+namex(char *path, int nameiparent, char *name)
+{
+  struct inode *ip, *next;
+
+  if(*path == '/')
+    ip = iget(ROOTDEV, ROOTINO);
+  else
+    ip = idup(myproc()->cwd);
+
+  while((path = skipelem(path, name)) != 0){
+    ilock(ip);
+    if(ip->type != T_DIR){
+      iunlockput(ip);
+      return 0;
+    }
+    if(nameiparent && *path == '\0'){
+      // Stop one level early.
+      iunlock(ip);
+      return ip;
+    }
+    if((next = dirlookup(ip, name, 0)) == 0){
+      iunlockput(ip);
+      return 0;
+    }
+    iunlockput(ip);
+    ip = next;
+  }
+  if(nameiparent){
+    iput(ip);
+    return 0;
+  }
+  return ip;
+}
+
+struct inode*
+namei(char *path)
+{
+  char name[DIRSIZ];
+  return namex(path, 0, name);
+}
+
+struct inode*
+nameiparent(char *path, char *name)
+{
+  return namex(path, 1, name);
+}
+```
+
+- `namei`根据文件路径直接返回对应的文件的`inode`
+- `nameiparent`返回文件的父目录的`inode`并且把最后的文件名拷贝到`name`这个缓冲区里面
+
+```c
+  if(*path == '/')
+    ip = iget(ROOTDEV, ROOTINO);
+  else
+    ip = idup(myproc()->cwd);
+
+```
+
+首先是对路径进行处理,如果是根目录,将当前的`inode`设置为根目录,否则设置为当前`inode`的目录:`cwd`也就是`current_directory`
+
+接着对路径开始递归处理:
+
+```c
+
+  while((path = skipelem(path, name)) != 0){
+    ilock(ip);
+    if(ip->type != T_DIR){
+      iunlockput(ip);
+      return 0;
+    }
+    if(nameiparent && *path == '\0'){
+      // Stop one level early.
+      iunlock(ip);
+      return ip;
+    }
+    if((next = dirlookup(ip, name, 0)) == 0){
+      iunlockput(ip);
+      return 0;
+    }
+    iunlockput(ip);
+    ip = next;
+  }
+```
+
+这里的`skipelem`是一个辅助函数,负责将下一段路径赋值给`path`并且将下一段路径设置拷贝到name中,比如对于
+
+```c
+char path[] = "/a/b/c/d";
+```
+
+那么会把a拷贝进name,同时将"b/c/d"赋值给path.
+
+> // Examples:
+> //   skipelem("a/bb/c", name) = "bb/c", setting name = "a"
+> //   skipelem("///a//bb", name) = "bb", setting name = "a"
+> //   skipelem("a", name) = "", setting name = "a"
+> //   skipelem("", name) = skipelem("////", name) = 0
+> //
+
+```c
+    if((next = dirlookup(ip, name, 0)) == 0){
+      iunlockput(ip);
+      return 0;
+    }
+```
+
+这一段是递归调用,在当前的目录下查找名为`name`的文件,如果文件深度不够用,那么直接失败
+
+```c
+// Look for a directory entry in a directory.
+// If found, set *poff to byte offset of entry.
+struct inode*
+dirlookup(struct inode *dp, char *name, uint *poff)
+{
+  uint off, inum;
+  struct dirent de;
+
+  if(dp->type != T_DIR)
+    panic("dirlookup not DIR");
+
+  for(off = 0; off < dp->size; off += sizeof(de)){
+    if(readi(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+      panic("dirlookup read");
+    if(de.inum == 0)
+      continue;
+    if(namecmp(name, de.name) == 0){
+      // entry matches path element
+      if(poff)
+        *poff = off;
+      inum = de.inum;
+      return iget(dp->dev, inum);
+    }
+  }
+
+  return 0;
+}
+```
+
+这里的逻辑很简单,就是遍历当前文件夹下的所有文件,查找当前文件夹下的所有文件,逐个比对文件名称,找到了就直接返回对应的`inode`块
+
+注意,在目录中,文件其实可以理解为一个指向`inode`的指针,存储有文件的名称,inode号等等内容,这里就是存储在`struct dirent `
+
+```c
+struct dirent {
+  ushort inum;
+  char name[DIRSIZ] __attribute__((nonstring));
+};
+```
+
+这里的readi是一个重要函数,表示从`inode`的位置读取数据
+
+```c
+int
+readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
+{
+  uint tot, m;
+  struct buf *bp;
+
+  if(off > ip->size || off + n < off)
+    return 0;
+  if(off + n > ip->size)
+    n = ip->size - off;
+
+  for(tot=0; tot<n; tot+=m, off+=m, dst+=m){
+    uint addr = bmap(ip, off/BSIZE);
+    if(addr == 0)
+      break;
+    bp = bread(ip->dev, addr);
+    m = min(n - tot, BSIZE - off%BSIZE);
+    if(either_copyout(user_dst, dst, bp->data + (off % BSIZE), m) == -1) {
+      brelse(bp);
+      tot = -1;
+      break;
+    }
+    brelse(bp);
+  }
+  return tot;
+}
+```
+
+他的参数有5个 含义如下:
+
+- `struct inode* ip`表示从ip的位置读取数据
+- `user_dst`, 表示目标地址是属于用户地址还是内核地址
+- `dst`内存地址
+- `off`表示读取的偏移
+- `n`表示读取的字节数
+
+对于不同的权限,会使用不同的复制方法,如果是内核空间,那直接使用`memove`实现高效复制即可,但是对于用户空间,需要使用`copyout`实现页表的按页映射,这里使用的就是虚拟地址了,从`char* src`赋值`len`字节的数据到`dstva`的用户页表空间
+
+```c
+// Copy from kernel to user.
+// Copy len bytes from src to virtual address dstva in a given page table.
+// Return 0 on success, -1 on error.
+int
+copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len){
+  uint64 n, va0, pa0;
+  pte_t *pte;
+
+  while(len > 0){
+    va0 = PGROUNDDOWN(dstva);
+    if(va0 >= MAXVA)
+      return -1;
+  
+    pa0 = walkaddr(pagetable, va0);
+    if(pa0 == 0) {
+      if((pa0 = vmfault(pagetable, va0, 0)) == 0) {
+        return -1;
+      }
+    }
+
+    pte = walk(pagetable, va0, 0);
+    // forbid copyout over read-only user text pages.
+    if((*pte & PTE_W) == 0)
+      return -1;
+      
+    n = PGSIZE - (dstva - va0);
+    if(n > len)
+      n = len;
+    memmove((void *)(pa0 + (dstva - va0)), src, n);
+
+    len -= n;
+    src += n;
+    dstva = va0 + PGSIZE;
+  }
+  return 0;
+}
+```
+
+终于找到了对应的目录后,查找这个目录下的所有文件,如果文件存在,那么直接返回就行,否则就分配一个`inode`
+
+```c
+
+// Allocate an inode on device dev.
+// Mark it as allocated by  giving it type type.
+// Returns an unlocked but allocated and referenced inode,
+// or NULL if there is no free inode.
+struct inode*
+ialloc(uint dev, short type)
+{
+  int inum;
+  struct buf *bp;
+  struct dinode *dip;
+
+  for(inum = 1; inum < sb.ninodes; inum++){
+    bp = bread(dev, IBLOCK(inum, sb));
+    dip = (struct dinode*)bp->data + inum%IPB;
+    if(dip->type == 0){  // a free inode
+      memset(dip, 0, sizeof(*dip));
+      dip->type = type;
+      log_write(bp);   // mark it allocated on the disk
+      brelse(bp);
+      return iget(dev, inum);
+    }
+    brelse(bp);
+  }
+  printf("ialloc: no inodes\n");
+  return 0;
+}
+```
+
+
+
+```c
+
+  if(type == T_DIR){  // Create . and .. entries.
+    // No ip->nlink++ for ".": avoid cyclic ref count.
+    if(dirlink(ip, ".", ip->inum) < 0 || dirlink(ip, "..", dp->inum) < 0)
+      goto fail;
+  }
+```
+
+如果你要创建的文件是文件夹,那么这里需要使用`dirlink`这个函数来实现映射:
+
+```c
+int
+dirlink(struct inode *dp, char *name, uint inum);
+```
+
+这个函数的功能是在`dp`这个文件中,将`name`这个文件名和`inum`这个文件联系起来,
+
+```c
+
+// Write a new directory entry (name, inum) into the directory dp.
+// Returns 0 on success, -1 on failure (e.g. out of disk blocks).
+int
+dirlink(struct inode *dp, char *name, uint inum)
+{
+  int off;
+  struct dirent de;
+  struct inode *ip;
+
+  // Check that name is not present.
+  if((ip = dirlookup(dp, name, 0)) != 0){
+    iput(ip);
+    return -1;
+  }
+
+  // Look for an empty dirent.
+  for(off = 0; off < dp->size; off += sizeof(de)){
+    if(readi(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+      panic("dirlink read");
+    if(de.inum == 0)
+      break;
+  }
+
+  strncpy(de.name, name, DIRSIZ);
+  de.inum = inum;
+  if(writei(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+    return -1;
+
+  return 0;
+}
+```
+
+为了尽可能避免改变目录文件的大小,这里会尽可能查找有没有空闲的目录项.如果没有找到,则需要在文件末尾写入一个新的表项
+
+这里看到`writei`函数
+
+```c
+// Write data to inode.
+// Caller must hold ip->lock.
+// If user_src==1, then src is a user virtual address;
+// otherwise, src is a kernel address.
+// Returns the number of bytes successfully written.
+// If the return value is less than the requested n,
+// there was an error of some kind.
+int
+writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
+{
+  uint tot, m;
+  struct buf *bp;
+
+  if(off > ip->size || off + n < off)
+    return -1;
+  if(off + n > MAXFILE*BSIZE)
+    return -1;
+
+  for(tot=0; tot<n; tot+=m, off+=m, src+=m){
+    uint addr = bmap(ip, off/BSIZE);
+    if(addr == 0)
+      break;
+    bp = bread(ip->dev, addr);
+    m = min(n - tot, BSIZE - off%BSIZE);
+    if(either_copyin(bp->data + (off % BSIZE), user_src, src, m) == -1) {
+      brelse(bp);
+      break;
+    }
+    log_write(bp);
+    brelse(bp);
+  }
+
+  if(off > ip->size)
+    ip->size = off;
+
+  // write the i-node back to disk even if the size didn't change
+  // because the loop above might have called bmap() and added a new
+  // block to ip->addrs[].
+  iupdate(ip);
+
+  return tot;
+}
+
+```
+
+这里的`bmap`的功能是将一个文件内部的逻辑块号转换为他的物理地址,如果这个块的逻辑地址尚未分派,`bmap`还会生成一个新的物理块.
+
