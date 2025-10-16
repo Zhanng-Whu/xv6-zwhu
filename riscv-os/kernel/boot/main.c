@@ -43,6 +43,16 @@ main()
     plicInit();
     plicInitHart();
 
+    // 磁盘初始化
+    binit();
+
+
+    // 文件系统初始化
+    iinit();
+
+    // 用户程序初始化
+    userinit();
+
     __sync_synchronize();
     started = 1;
   } else {

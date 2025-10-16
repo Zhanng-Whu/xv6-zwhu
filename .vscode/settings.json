@@ -15,7 +15,8 @@
     "types.h": "c",
     "random": "c",
     "list": "c",
-    "fcntl.h": "c"
+    "fcntl.h": "c",
+    "buf.h": "c"
   },
   "C_Cpp_Runner.cCompilerPath": "gcc",
   "C_Cpp_Runner.cppCompilerPath": "g++",

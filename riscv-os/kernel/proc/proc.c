@@ -4,10 +4,23 @@
 #include "include/param.h"
 #include "include/memlayout.h"
 #include "include/defs.h"
+#include "include/spinlock.h"
 
 struct cpu cpus[NCPU];
 
 struct PCB PCBs[NPROC];
+
+struct PCB* initproc;
+
+
+// 用于PID分配的锁
+struct spinlock pid_lock;
+struct spinlock wait_lock;
+
+
+extern char trampoline[]; // trampoline.S
+
+static int nextpid = 1;
 
 int cpuid() {
   int id = r_tp();
@@ -20,6 +33,14 @@ mycpu(void){
     return c;
 }
 
+struct PCB* myproc(void){
+  push_off();
+  struct cpu *c = mycpu();
+  struct PCB *p = c->proc;
+  pop_off();
+
+  return p;
+}
 
 void 
 proc_mapstacks(pagetable_t kpgtbl){
@@ -34,10 +55,57 @@ proc_mapstacks(pagetable_t kpgtbl){
   }
 }
 
+// 使用一个lock来实现进程的睡眠与唤醒
+// 这个锁在进入之前必须被持有
+// 一般是这样使用的:
+// void f(){
+//   acquire(&lk);
+//   while(条件不满足)
+//     sleep(&chan, &lk);
+//   // 条件满足
+//   release(&lk);
+// }
+
+void sleep(void* chan, struct spinlock* lk){
+  struct PCB* p = myproc();
+
+  if(lk == 0)
+    panic("sleep");
+
+  acquire(&p->lock);
+  release(lk);
+
+  p->chan = chan;
+  p->state = SLEEPING;
+
+  sched();
+
+  p->chan = 0;
+
+  release(&p->lock);
+  acquire(lk);
+}
+
+void wakeup(void* chan){
+  struct PCB* p;
+  for(p = PCBs; p < &PCBs[NPROC]; p++){
+    // 因为当前的进程是唤醒其他进程的进程 所以不应该被检查
+    if(p != myproc()){
+      acquire(&p->lock);
+      if(p->state == SLEEPING && p->chan == chan){
+        p->state = RUNNABLE;
+      }
+      release(&p->lock);
+    }
+  }
+}
 
 void 
 procinit(void){
   struct  PCB* p;
+
+  initlock(&pid_lock, "nextpid");
+  initlock(&wait_lock, "wait_lock");
 
   for(p = PCBs; p < &PCBs[NPROC]; p++){
     initlock(&p->lock, "proc");
@@ -58,7 +126,13 @@ void scheduler(void){
     int found = 0 ;
     for(p = PCBs; p < &PCBs[NPROC]; p++){
       acquire(&p->lock);
-      
+      if(p->state == RUNNABLE){
+        p->state = RUNNING;
+        c->proc = p;
+        swtch(&c->context, &p->context);
+        c->proc = 0;
+        found = 1;
+      } 
       release(&p->lock);
     }
     if(found == 0){
@@ -93,4 +167,159 @@ void yield(void){
   p->state = RUNNABLE;
   sched();
   release(&p->lock);
+}
+
+int allocpid(){
+  int pid;
+
+  acquire(&pid_lock);
+  pid = nextpid++;
+  release(&pid_lock);
+  return pid;
+}
+
+
+// 根据页表和虚拟内存大小释放进程的页表
+static void 
+uFreeUserVM(pagetable_t pagetable, uint64 sz){
+
+  // 这里 uVmUnmap有一个保护机制 即使没有分配也不会出错
+  // 这里的这两个是特殊的映射 不是直接映射到最低位 而是直接映射到最高位
+  uVmUnmap(pagetable, TRAMPOLINE, 1, 0);
+
+  uVmUnmap(pagetable, TRAPFRAME, 1, 0);
+
+  // 这个是从0地址开始的
+  // 释放sz字节的内存
+  // 最后还会释放页表本身
+  uVmFree(pagetable, sz);
+}
+
+static void
+uFreeProc(struct PCB* p){
+  if(p->trapframe)
+    kfree((void*)p->trapframe);
+  p->trapframe = 0;
+  if(p->pagetable)
+    uFreeUserVM(p->pagetable, p->sz);
+  p->pagetable = 0;
+  p->sz = 0;
+  p->pid = 0;
+  p->parent = 0;
+  p->name[0] = 0;
+  p->killed = 0;
+  p->xstate = 0;
+  p->chan = 0;
+  p->state = UNUSED;
+}
+
+pagetable_t procPagetable(struct PCB* p){
+  pagetable_t pagetable;
+
+  pagetable = uVmCreate();
+  if(pagetable == 0)
+    return 0;
+
+  if(mapPages(pagetable, TRAMPOLINE, PGSIZE,
+              (uint64)trampoline, PTE_R | PTE_X) < 0){
+      uVmFree(pagetable, 0);
+      return 0;
+  }
+
+  if(mapPages(pagetable, TRAPFRAME, PGSIZE,
+              (uint64)(p->trapframe), PTE_R | PTE_W) < 0){
+      uVmUnmap(pagetable, TRAMPOLINE, 1, 0);
+      uVmFree(pagetable, 0);
+      return 0;
+  }    
+  
+  return pagetable;
+}
+
+void forkret(void){
+  extern char userret[];
+  static int first = 1; 
+  struct PCB *p = myproc();
+
+  release(&p->lock);
+
+  if(first){
+    for(;;){
+      printf("in forkret\n");
+    }
+
+    // fsinit(ROOTDEV);
+
+    first = 0;
+    __sync_synchronize();
+    
+    // p->trapframe->a0 = kexec("/init", (char *[]){ "/init", 0 });
+    // if (p->trapframe->a0 == -1) {
+    //   panic("exec");
+    // } 
+    for(;;){
+      printf("in forkret after fsinit\n");
+    }
+
+  }
+
+  uint64 satp = MAKE_SATP(p->pagetable);
+  uint64 trampoline_userret = TRAMPOLINE + (userret - trampoline);
+  ((void (*)(uint64))trampoline_userret)(satp);
+}
+
+
+
+// 在进程的所有PCB中找到一个状态为UNUSED的PCB，分配给新进程使用
+// 如果找到了 那么进行初始化并且返回这个PCB，并且这个PCB的锁是被持有的
+// 如果没有找到或者内存分配失败 返回NULL
+static struct PCB*
+allocproc(void){
+  struct PCB* p;
+  for(p = PCBs; p < &PCBs[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->state == UNUSED){
+      goto found;
+    } else {
+      release(&p->lock);
+    }
+  }
+  return 0;
+
+found:
+  p->pid = allocpid();
+  p->state = USED;
+  // 分配用户的trapframe
+  // 用于保存用户态的寄存器
+
+  if((p->trapframe = (struct trapframe*)kalloc()) == 0){
+    uFreeProc(p);
+    release(&p->lock);
+    return 0;
+  }
+
+  p->pagetable = procPagetable(p);
+  if(p->pagetable == 0){
+    uFreeProc(p);
+    release(&p->lock);
+    return 0;
+  }
+
+  memset(&p->context, 0, sizeof(p->context));
+  p->context.ra = (uint64)forkret;
+  p->context.sp = p->kstack + PGSIZE;
+
+  return p;
+}
+
+void 
+userinit(void){
+  struct PCB* p;
+
+  p = allocproc();
+  initproc = p;
+
+  p->state = RUNNABLE;
+  release(&p->lock);
+
 }

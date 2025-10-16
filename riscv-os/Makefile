@@ -76,7 +76,7 @@ tags: $(KSRCS_C) $(KSRCS_S) $(I)/*.h
 	etags $(KSRCS_C) $(KSRCS_S) $(I)/*.h
 
 
-ULIB = $U/ulib.o $U/usys.o $U/printf.o $U/umalloc.o
+ULIB = $U/ulib.o $U/usys.o 
 
 _%: %.o $(ULIB) $U/user.ld
 	$(LD) $(LDFLAGS) -T $U/user.ld -o $@ $< $(ULIB)
@@ -95,10 +95,9 @@ $U/_forktest: $U/forktest.o $(ULIB)
 	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $U/_forktest $U/forktest.o $U/ulib.o $U/usys.o
 	$(OBJDUMP) -S $U/_forktest > $U/forktest.asm
 
-mkfs/mkfs: mkfs/mkfs.c $(I)/fs.h $(I)/param.h
-	gcc -I$(I) -o mkfs/mkfs mkfs/mkfs.c
 
-
+mkfs/mkfs: mkfs/mkfs.c $I/fs.h $I/param.h
+	gcc -Wno-unknown-attributes -I. -o mkfs/mkfs mkfs/mkfs.c
 
 # Prevent deletion of intermediate files, e.g. cat.o, after first build, so
 # that disk image changes after first build are persistent until clean.  More
@@ -106,8 +105,8 @@ mkfs/mkfs: mkfs/mkfs.c $(I)/fs.h $(I)/param.h
 # http://www.gnu.org/software/make/manual/html_node/Chained-Rules.html
 .PRECIOUS: %.o
 
-UPROGS=
-	
+UPROGS= \
+	$U/_test \
 
 fs.img: mkfs/mkfs  $(UPROGS)
 	mkfs/mkfs fs.img $(UPROGS)

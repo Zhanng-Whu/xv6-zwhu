@@ -2,6 +2,7 @@
 #ifndef DEFS
 #define DEFS
 struct spinlock;
+struct sleeplock;
 struct PCB;
 struct cpu;
 struct context;
@@ -31,7 +32,18 @@ void consputc(int c);
 
     int holding(struct spinlock* lk);
 
+// sleeplock.c
+void initsleeplock(struct sleeplock *lk, char *name);
+void acquiresleep(struct sleeplock *lk);
+void releasesleep(struct sleeplock *lk);
+int holdingsleep(struct sleeplock *lk);
 
+// bio.c
+void binit(void);
+
+
+// fs.c
+void iinit(void);
 
 // vm.c
 
@@ -71,8 +83,11 @@ struct cpu* mycpu(void);
 void proc_mapstacks(pagetable_t kpgtbl);
 void procinit(void);
 void yield(void);
-
-
+void userinit(void);
+struct PCB* myproc(void);
+void sleep(void* chan, struct spinlock* lk);
+void wakeup(void* chan);
+void sched(void);
 
 
 // printf.c
