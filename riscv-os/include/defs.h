@@ -6,7 +6,9 @@ struct sleeplock;
 struct PCB;
 struct cpu;
 struct context;
-
+struct buf;
+struct superblock;
+struct inode;
 
 // uart.c
 void uartinit();
@@ -17,6 +19,11 @@ void uartputc_sync(int c);
 // console.c
 void consoleinit(void);
 void consputc(int c);
+
+// virtio_disk.c
+void virtio_disk_init(void);
+void virtio_disk_rw(struct buf *b, int write);
+void virtio_disk_intr(void);
 
 
 // spinlock.c
@@ -40,12 +47,32 @@ int holdingsleep(struct sleeplock *lk);
 
 // bio.c
 void binit(void);
-
+struct buf* bread(int dev, int bnum);
+void brelse(struct buf* b);
+void bpin(struct buf* b);
+void bunpin(struct buf* b);
+void bwrite(struct buf* b);
 
 // fs.c
 void iinit(void);
+void fsinit(int dev);
+int readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n);
+void ilock(struct inode* ip);
+void iput(struct inode* ip);
+void uvmclear(pagetable_t pagetable, uint64 va);
+void iunlock(struct inode* ip);
+struct inode* namei(char* path);
+
+
+
+
+// file.c
+void fileinit(void);
 
 // vm.c
+uint64 uVA2PA(pagetable_t pagetable_t, uint64 va);
+uint64 vmfault(pagetable_t pagetable, uint64 va, int read);
+uint64 uVmAlloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm);
 
 // 内核内存分配的辅助函数, 功能是实现从虚拟地址到物理地址的映射,并且根据perm设置页表项的权限
 // 是基于mapPages实现 但是要求不允许分配失败
@@ -88,7 +115,15 @@ struct PCB* myproc(void);
 void sleep(void* chan, struct spinlock* lk);
 void wakeup(void* chan);
 void sched(void);
+int either_copyout(int user_dst, uint64 dst, void* src, uint64 len);
+pagetable_t procPagetable(struct PCB* p);
+int copyout(pagetable_t p, uint64 va, void* src, uint64 len);
+void uFreeUserVM(pagetable_t pagetable, uint64 sz);
+void  prepare_return();
 
+// exec.c
+// SHIT
+int kexec(char* path, char ** argv);
 
 // printf.c
 void panic(char *s);
@@ -146,5 +181,17 @@ int log2(uint64 x);
 
 // string.c
 void* memset(void *dst, int c, uint n);
+void* memmove(void* dst, const void * src, uint n);
+int memcmp(const void *v1, const void *v2, uint n);
+char* strncmp(const char *p, const char *q, uint n);
+int strlen(const char *s);
+char* safestrcpy(char *s, const char *t, int n);
+
+// log.c
+void initlog(int dev, struct superblock* sb);
+void begin_op();
+void end_op();
+void log_write(struct buf* b);
+
 
 #endif

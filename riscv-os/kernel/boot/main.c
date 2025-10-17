@@ -35,20 +35,25 @@ main()
     // 进程初始化
     procinit();
 
+    
     // 内核中断初始化
     trapInit();
     trapInitHart();
     
+
     // PLIC注册
     plicInit();
     plicInitHart();
 
     // 磁盘初始化
-    binit();
-
+    
 
     // 文件系统初始化
+    binit();
     iinit();
+    fileinit();
+
+    virtio_disk_init();
 
     // 用户程序初始化
     userinit();

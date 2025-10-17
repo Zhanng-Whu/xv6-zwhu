@@ -9,19 +9,16 @@
 #include "include/fs.h"
 #include "include/buf.h"
 #include "include/file.h"
+#include "include/proc.h"
 
-struct{
-    struct spinlock lock;
-    struct inode inode[NBUF];
-} itable;
+struct devsw devsw[NDEV];  
 
+struct {
+  struct spinlock lock;
+  struct file file[NFILE];
+} ftable;
 
-void 
-iinit(){
-    int i = 0;
+void fileinit(void){
+  initlock(&ftable.lock, "ftable");
 
-    initlock(&itable.lock, "itable");
-    for(i = 0; i < NBUF; i++){
-        initsleeplock(&itable.inode[i].lock, "inode");
-    }
 }

@@ -1616,142 +1616,93 @@ safestrcpy(char *s, const char *t, int n)
 
 ## kexec()与进程执行
 
+首先来讲一下用户进程的执行流程.
+
+假设你写了一个`test.c`的文件,为用户进程,其内容如下:
+
 ```c
-
-//
-// the implementation of the exec() system call
-//
-int
-kexec(char *path, char **argv)
-{
-  char *s, *last;
-  int i, off;
-  uint64 argc, sz = 0, sp, ustack[MAXARG], stackbase;
-  struct elfhdr elf;
-  struct inode *ip;
-  struct proghdr ph;
-  pagetable_t pagetable = 0, oldpagetable;
-  struct proc *p = myproc();
-
-  begin_op();
-
-  // Open the executable file.
-  if((ip = namei(path)) == 0){
-    end_op();
-    return -1;
-  }
-  ilock(ip);
-
-  // Read the ELF header.
-  if(readi(ip, 0, (uint64)&elf, 0, sizeof(elf)) != sizeof(elf))
-    goto bad;
-
-  // Is this really an ELF file?
-  if(elf.magic != ELF_MAGIC)
-    goto bad;
-
-  if((pagetable = proc_pagetable(p)) == 0)
-    goto bad;
-
-  // Load program into memory.
-  for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
-    if(readi(ip, 0, (uint64)&ph, off, sizeof(ph)) != sizeof(ph))
-      goto bad;
-    if(ph.type != ELF_PROG_LOAD)
-      continue;
-    if(ph.memsz < ph.filesz)
-      goto bad;
-    if(ph.vaddr + ph.memsz < ph.vaddr)
-      goto bad;
-    if(ph.vaddr % PGSIZE != 0)
-      goto bad;
-    uint64 sz1;
-    if((sz1 = uvmalloc(pagetable, sz, ph.vaddr + ph.memsz, flags2perm(ph.flags))) == 0)
-      goto bad;
-    sz = sz1;
-    if(loadseg(pagetable, ph.vaddr, ip, ph.off, ph.filesz) < 0)
-      goto bad;
-  }
-  iunlockput(ip);
-  end_op();
-  ip = 0;
-
-  p = myproc();
-  uint64 oldsz = p->sz;
-
-  // Allocate some pages at the next page boundary.
-  // Make the first inaccessible as a stack guard.
-  // Use the rest as the user stack.
-  sz = PGROUNDUP(sz);
-  uint64 sz1;
-  if((sz1 = uvmalloc(pagetable, sz, sz + (USERSTACK+1)*PGSIZE, PTE_W)) == 0)
-    goto bad;
-  sz = sz1;
-  uvmclear(pagetable, sz-(USERSTACK+1)*PGSIZE);
-  sp = sz;
-  stackbase = sp - USERSTACK*PGSIZE;
-
-  // Copy argument strings into new stack, remember their
-  // addresses in ustack[].
-  for(argc = 0; argv[argc]; argc++) {
-    if(argc >= MAXARG)
-      goto bad;
-    sp -= strlen(argv[argc]) + 1;
-    sp -= sp % 16; // riscv sp must be 16-byte aligned
-    if(sp < stackbase)
-      goto bad;
-    if(copyout(pagetable, sp, argv[argc], strlen(argv[argc]) + 1) < 0)
-      goto bad;
-    ustack[argc] = sp;
-  }
-  ustack[argc] = 0;
-
-  // push a copy of ustack[], the array of argv[] pointers.
-  sp -= (argc+1) * sizeof(uint64);
-  sp -= sp % 16;
-  if(sp < stackbase)
-    goto bad;
-  if(copyout(pagetable, sp, (char *)ustack, (argc+1)*sizeof(uint64)) < 0)
-    goto bad;
-
-  // a0 and a1 contain arguments to user main(argc, argv)
-  // argc is returned via the system call return
-  // value, which goes in a0.
-  p->trapframe->a1 = sp;
-
-  // Save program name for debugging.
-  for(last=s=path; *s; s++)
-    if(*s == '/')
-      last = s+1;
-  safestrcpy(p->name, last, sizeof(p->name));
-    
-  // Commit to the user image.
-  oldpagetable = p->pagetable;
-  p->pagetable = pagetable;
-  p->sz = sz;
-  p->trapframe->epc = elf.entry;  // initial program counter = ulib.c:start()
-  p->trapframe->sp = sp; // initial stack pointer
-  proc_freepagetable(oldpagetable, oldsz);
-
-  return argc; // this ends up in a0, the first argument to main(argc, argv)
-
- bad:
-  if(pagetable)
-    proc_freepagetable(pagetable, sz);
-  if(ip){
-    iunlockput(ip);
-    end_op();
-  }
-  return -1;
+int func(int a){
+    return a;
+}
+int main(){
+    int a = 1;
+    func(a);
+    return 0;
 }
 ```
 
-以上是`exec()`的实现,是非常大依托.
+那么他最后是怎么被一步一步加载到内存中被我们执行的呢?
 
-但是不幸的是,所有的程序都和这个有关, 所以只能现在啃
+1. 这个程序被编译器处理,转化为了test.S和test.o
+
+2. 使用链接器,将test.o和其他的库函数进行链接:
+    ```makefile
+    _%: %.o $(ULIB) $U/user.ld
+    	$(LD) $(LDFLAGS) -T $U/user.ld -o $@ $< $(ULIB)
+    	...
+    ```
+
+    注意,在链接器中,默认将程序的第一句设置成
+    ```ld
+    ENTRY(start)
+    ```
+
+    关于这一点可以通过测试来实现,比如在start函数的开头加入:
+    ```c
+    void
+    start(int argc, char **argv)
+    {
+      write(1, "Hello, World!\n", 14);
+      int r;
+      extern int main(int argc, char **argv);
+      r = main(argc, argv);
+      exit(r);
+    }
+    ```
+
+    然后可以看到每一句开头打印 helloworld
+    但是如果去user.ld里面改变一下:
+
+    ```ld
+    OUTPUT_ARCH( "riscv" )
+    ENTRY( start )
+    
+    SECTIONS
+    {
+     . = 0x0;
+     
+      .text : {
+        *(.text .text.*)
+      }
+    ```
+
+    那就不会打印了.
+
+3. 链接后的`_test`程序通过Makefile脚本和mkfs程序制作成虚拟磁盘,被挂载在`/`目录下,并且设置了相应的sb和inode
+
+4. 被`_sh`程序处理,通过fork和exec被执行,从`start()`函数开始执行(当然,进用户态之前在`forkret`里面做准备)
+    ```c
+    void
+    start(int argc, char **argv)
+    {
+      write(1, "Hello, World!\n", 14);
+      int r;
+      extern int main(int argc, char **argv);
+      r = main(argc, argv);
+      exit(r);
+    }
+    ```
+    
+5. 结束后,通过exit释放整个进程并且被回收(被父进程或者被`initproc`)
+
+    
+
+那么关键就是如何处理`exec`的过程了,首先先回去补全一下`userinit`里面的`cwd`的设置,具体内容参考第七章中的`namei`实现.
 
 ```c
 ```
+
+
 
 
 

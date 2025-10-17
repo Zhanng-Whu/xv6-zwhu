@@ -6,8 +6,10 @@
 
 
 void plicInit(void){
-    // do nothing
+
+    registerDev(VIRTIO0_IRQ, 1);
 }
+
 
 // 根据设备和优先读进行注册
 void registerDev(int irq, int priority){
@@ -21,8 +23,8 @@ void unregisterDev(int irq){
 void plicInitHart(void){
     int hart = cpuid();
 
-    enableDev(UART0_IRQ);
-    
+    enableDev(VIRTIO0_IRQ);
+
     // 设置这个hart的S模式下的优先级阈值为0
     *(uint32*)PLIC_SPRIORITY(hart) = 0;
 }

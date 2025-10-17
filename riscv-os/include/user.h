@@ -3,3 +3,4 @@
 struct stat;
 
 // system calls
+void start(int argc, char **argv);

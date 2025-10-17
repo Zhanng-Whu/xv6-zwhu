@@ -5,3 +5,13 @@
 #include "include/vm.h"
 #include "include/user.h"
 
+
+void
+start(int argc, char **argv)
+{
+  extern int main(int argc, char **argv);
+    main(argc, argv);
+
+  for(;;);
+  
+}

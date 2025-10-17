@@ -180,7 +180,7 @@ int allocpid(){
 
 
 // 根据页表和虚拟内存大小释放进程的页表
-static void 
+void 
 uFreeUserVM(pagetable_t pagetable, uint64 sz){
 
   // 这里 uVmUnmap有一个保护机制 即使没有分配也不会出错
@@ -244,25 +244,23 @@ void forkret(void){
   release(&p->lock);
 
   if(first){
-    for(;;){
-      printf("in forkret\n");
-    }
 
-    // fsinit(ROOTDEV);
+    fsinit(ROOTDEV);
 
     first = 0;
     __sync_synchronize();
     
-    // p->trapframe->a0 = kexec("/init", (char *[]){ "/init", 0 });
-    // if (p->trapframe->a0 == -1) {
-    //   panic("exec");
-    // } 
-    for(;;){
-      printf("in forkret after fsinit\n");
-    }
+
+    // 最牢的一句
+    p->trapframe->a0 = kexec("/test", (char *[]){ "/test", 0 });
+    if (p->trapframe->a0 == -1) {
+      panic("exec");
+    } 
+
 
   }
 
+  prepare_return();
   uint64 satp = MAKE_SATP(p->pagetable);
   uint64 trampoline_userret = TRAMPOLINE + (userret - trampoline);
   ((void (*)(uint64))trampoline_userret)(satp);
@@ -312,6 +310,55 @@ found:
   return p;
 }
 
+
+// 实现从内核地址空间向用户地址空间复制数据
+// 需要根据页表来进行逐个的页复制
+// 返回0表示成功 -1表示失败
+int copyout(pagetable_t pagetable, uint64 va, void* src, uint64 len){
+  uint64 n, va0, pa0;
+  pte_t *pte;
+
+  while(len > 0){
+    va0 = PGROUNDDOWN(va);
+    if(va0 >= MAXVA)
+      return -1;
+    
+    // 获取物理地址
+    pa0 = uVA2PA(pagetable, va0);
+    if(pa0 == 0){
+      // 如果对应的物理地址在页表中不存在 通过缺页异常尝试获取
+      if((vmfault(pagetable, va0, 0)) == 0)
+        return -1;
+
+    }
+
+    pte = walk(pagetable, va0, 0);
+    if((*pte & PTE_W) == 0)
+      return -1;
+
+    n = PGSIZE - (va - va0);
+    if(n > len)
+      n = len;
+    memmove((void *)(pa0 + (va - va0)), src, n);
+
+    len -= n;
+    src += n;
+    va = va0 + PGSIZE;
+  }
+  return 0;
+}
+
+int 
+either_copyout(int user_dst, uint64 dst, void* src, uint64 len){
+  struct PCB* p = myproc();
+  if(user_dst){
+    return copyout(p->pagetable, dst, src, len);
+  } else {
+    memmove((char*)dst, src, len);
+    return 0;
+  }
+}
+
 void 
 userinit(void){
   struct PCB* p;
@@ -319,7 +366,18 @@ userinit(void){
   p = allocproc();
   initproc = p;
 
+  // 这里的cwd是一个inode 
+  // 就是指向当前的工作目录的inode
+  // 具体实现很麻烦 但是比较重要
+  // 涉及到整个系统读写和字符串算法
+  // 是整个文件系统的核心接口之一
+  p->cwd = namei("/");
+
+  printf("Test124\n\n\n");
   p->state = RUNNABLE;
+
+
+
   release(&p->lock);
 
 }

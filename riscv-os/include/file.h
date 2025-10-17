@@ -24,5 +24,10 @@ struct inode{
     uint addrs[NDIRECT+1];
 };
 
+struct devsw{
+    int (*read)(int, uint64, int);
+    int (*write)(int, uint64, int);
+};
+
 
 #endif

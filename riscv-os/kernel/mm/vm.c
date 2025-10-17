@@ -176,6 +176,16 @@ kVmInitHart(){
     sfence_vma();
 }
 
+void
+uvmclear(pagetable_t pagetable, uint64 va){
+    pte_t* pte;
+
+    pte = walk(pagetable, va, 0);
+    if(pte == 0)
+        panic("uvmclear");
+    
+    *pte &= ~PTE_U;
+}
 
 void printPgtbl(pagetable_t pagetable, int level, int to_level){
 
@@ -209,6 +219,47 @@ void printPgtbl(pagetable_t pagetable, int level, int to_level){
 }
 
 
+
+// 检查这个对应的页表项是否被使用
+// 如果没有被使用 那么返回0
+// 否则返回1
+int
+ismapped(pagetable_t pagetable, uint64 va)
+{
+  pte_t *pte = walk(pagetable, va, 0);
+  if (pte == 0) {
+    return 0;
+  }
+  if (*pte & PTE_V){
+    return 1;
+  }
+  return 0;
+}
+
+uint64
+vmfault(pagetable_t pagetable, uint64 va, int read){
+    uint64 mem;
+
+    if(va >= MAXVA)
+        return 0;
+    
+    va = PGROUNDDOWN(va);
+
+    if(ismapped(pagetable, va)){
+        return 0;
+    }
+
+    mem = (uint64) kalloc();
+    if(mem == 0)
+        return 0;
+    
+    memset((void*)mem, 0, PGSIZE);
+    if(mapPages(pagetable, va, PGSIZE, mem, PTE_W|PTE_U|PTE_R) != 0){
+        kfree((void*)mem);
+        return 0;
+    }
+    return mem;
+}
 
 // 只读版的walk函数,专门用于实现用户态程序读取自己的页表
 // 根据用户的虚拟地址和页表,读取对应的物理地址

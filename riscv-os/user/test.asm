@@ -27,3 +27,21 @@ int main(){
   14:	6422                	ld	s0,8(sp)
   16:	0141                	add	sp,sp,16
   18:	8082                	ret
+
+000000000000001a <start>:
+#include "include/user.h"
+
+
+void
+start(int argc, char **argv)
+{
+  1a:	1141                	add	sp,sp,-16
+  1c:	e406                	sd	ra,8(sp)
+  1e:	e022                	sd	s0,0(sp)
+  20:	0800                	add	s0,sp,16
+  extern int main(int argc, char **argv);
+    main(argc, argv);
+  22:	febff0ef          	jal	c <main>
+
+  for(;;);
+  26:	a001                	j	26 <start+0xc>

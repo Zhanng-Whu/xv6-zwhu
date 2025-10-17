@@ -94,8 +94,8 @@ struct PCB{
   uint64 sz;                   // 进程内存大小
 
   // 文件系统
-  // struct file *ofile[NOFILE];  // 打开的文件
-  // struct inode *cwd;           // 当前目录
+  struct file *ofile[NOFILE];  // 打开的文件
+  struct inode *cwd;           // 当前目录
 };
 
 extern struct PCB PCBs[NPROC];

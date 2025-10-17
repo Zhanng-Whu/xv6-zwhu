@@ -22,6 +22,49 @@ trapInitHart(void)
   w_stvec((uint64)kernelVec);
 }
 
+uint64 usertrap();
+
+
+//
+// set up trapframe and control registers for a return to user space
+//
+void
+prepare_return(void)
+{
+  extern char uservec[];
+  extern char trampoline[];
+  
+  struct PCB *p = myproc();
+
+  // we're about to switch the destination of traps from
+  // kerneltrap() to usertrap(). because a trap from kernel
+  // code to usertrap would be a disaster, turn off interrupts.
+  intr_off();
+
+  // send syscalls, interrupts, and exceptions to uservec in trampoline.S
+  uint64 trampoline_uservec = TRAMPOLINE + (uservec - trampoline);
+  w_stvec(trampoline_uservec);
+
+  // set up trapframe values that uservec will need when
+  // the process next traps into the kernel.
+  p->trapframe->kernel_satp = r_satp();         // kernel page table
+  p->trapframe->kernel_sp = p->kstack + PGSIZE; // process's kernel stack
+  p->trapframe->kernel_trap = (uint64)usertrap;
+  p->trapframe->kernel_hartid = r_tp();         // hartid for cpuid()
+
+  // set up the registers that trampoline.S's sret will use
+  // to get to user space.
+  
+  // set S Previous Privilege mode to User.
+  unsigned long x = r_sstatus();
+  x &= ~SSTATUS_SPP; // clear SPP to 0 for user mode
+  x |= SSTATUS_SPIE; // enable interrupts in user mode
+  w_sstatus(x);
+
+  // set S Exception Program Counter to the saved user pc.
+  w_sepc(p->trapframe->epc);
+}
+
 void 
 clockIntr(){
 
@@ -42,6 +85,7 @@ int devIntr(){
     if(irq == UART0_IRQ){
       printf("串口中断\n");
     } else if(irq == VIRTIO0_IRQ){
+      virtio_disk_intr();
       printf("磁盘中断\n"); 
     } else if(irq){
       printf("未知中断号 irq=%d\n", irq);
@@ -89,6 +133,48 @@ void kernelTrap(void){
   w_sepc(sepc);
   w_sstatus(sstatus);
   
-  printf("Hello");
 
+}
+
+
+uint64
+usertrap(void){
+
+
+  int which_dev = 0;
+
+  if((r_sstatus() & SSTATUS_SPP) != 0)
+    panic("usertrap: not from user mode");  
+
+  w_stvec((uint64)kernelVec);  //DOC: kernelvec
+
+  struct PCB *p = myproc();
+  
+  p->trapframe->epc = r_sepc();
+ if(r_scause() == 8){
+    
+  } else if((which_dev = devIntr()) != 0){
+    // ok
+  } else if((r_scause() == 15 || r_scause() == 13) &&
+            vmfault(p->pagetable, r_stval(), (r_scause() == 13)? 1 : 0) != 0) {
+              printf("处理缺页异常成功\n");
+    // page fault on lazily-allocated page
+  } else {
+    printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
+    printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
+    for(;;);
+  }
+
+  // give up the CPU if this is a timer interrupt.
+  if(which_dev == 2)
+    yield();
+
+  prepare_return();
+
+  // the user page table to switch to, for trampoline.S
+  uint64 satp = MAKE_SATP(p->pagetable);
+
+  printf("Hello");
+  // return to trampoline.S; satp value in a0.
+  return satp;   
 }
