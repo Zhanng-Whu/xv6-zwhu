@@ -179,6 +179,7 @@ void end_op(){
     int do_commit = 0;
 
     acquire(&log.lock);
+    log.outstanding -= 1;
     if(log.committing)
         panic("log.committing");
     if(log.outstanding == 0){
