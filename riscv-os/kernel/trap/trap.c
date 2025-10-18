@@ -132,8 +132,6 @@ void kernelTrap(void){
     
   w_sepc(sepc);
   w_sstatus(sstatus);
-  
-
 }
 
 
@@ -152,7 +150,9 @@ usertrap(void){
   
   p->trapframe->epc = r_sepc();
  if(r_scause() == 8){
-    
+    p->trapframe->epc += 4;
+    intr_on();
+    syscall(); 
   } else if((which_dev = devIntr()) != 0){
     // ok
   } else if((r_scause() == 15 || r_scause() == 13) &&
@@ -162,8 +162,12 @@ usertrap(void){
   } else {
     printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
     printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
-    for(;;);
+
+    setkilled(p); 
   }
+
+  if(killed(p))
+    kexit(-1);
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
@@ -174,7 +178,6 @@ usertrap(void){
   // the user page table to switch to, for trampoline.S
   uint64 satp = MAKE_SATP(p->pagetable);
 
-  printf("Hello");
   // return to trampoline.S; satp value in a0.
   return satp;   
 }

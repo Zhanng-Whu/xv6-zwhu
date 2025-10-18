@@ -176,6 +176,7 @@ kVmInitHart(){
     sfence_vma();
 }
 
+
 void
 uvmclear(pagetable_t pagetable, uint64 va){
     pte_t* pte;
@@ -218,6 +219,33 @@ void printPgtbl(pagetable_t pagetable, int level, int to_level){
 
 }
 
+int 
+copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len){
+  uint64 n, va0, pa0;
+
+  while(len > 0){
+    va0 = PGROUNDDOWN(srcva);
+    pa0 = uVA2PA(pagetable, va0);
+
+    if(pa0 == 0) {
+      if((pa0 = vmfault(pagetable, va0, 1)) == 0) {
+        return -1;
+      }
+    }
+
+    n = PGSIZE - (srcva - va0);
+    if(n > len)
+      n = len;
+
+    char *p = (char *)(pa0 + (srcva - va0));
+    memmove(dst, p, n);
+
+    len -= n;
+    dst += n;
+    srcva = va0 + PGSIZE;
+  }
+  return 0;
+}
 
 
 // 检查这个对应的页表项是否被使用
@@ -341,8 +369,34 @@ uVmFree(pagetable_t pagetable, uint64 sz)
   freePgtbl(pagetable);
 }
 
+int 
+uvmcopy(pagetable_t old, pagetable_t new, uint64 sz){
+  pte_t *pte;
+  uint64 pa, i;
+  uint flags;
+  char *mem;
 
+  for(i = 0; i < sz; i += PGSIZE){
+    if((pte = walk(old, i, 0)) == 0)
+      continue;   // 页表项没有被分配
+    if((*pte & PTE_V) == 0)
+      continue;   // 物理页没有被分配
+    pa = PTE2PA(*pte);
+    flags = PTE_FLAGS(*pte);
+    if((mem = kalloc()) == 0)
+      goto err;
+    memmove(mem, (char*)pa, PGSIZE);
+    if(mapPages(new, i, PGSIZE, (uint64)mem, flags) != 0){
+      kfree(mem);
+      goto err;
+    }
+  }
+  return 0;
 
+ err:
+  uVmUnmap(new, 0, i / PGSIZE, 1);
+  return -1;
+}
 
 // 将用户的内存空间从oldsz扩展到newsz
 // newsz必须大于oldsz

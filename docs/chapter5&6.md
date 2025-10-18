@@ -1699,12 +1699,401 @@ int main(){
 
 那么关键就是如何处理`exec`的过程了,首先先回去补全一下`userinit`里面的`cwd`的设置,具体内容参考第七章中的`namei`实现.
 
+`exec`这个函数做了三件事:
+
+1. 创建一个页表,拷贝整个可执行文件到页面的低地址.
+2. 在上面的可执行文件之上,创建两个页,其中一个页用于栈,另一个用于作为保护页检测栈溢出.
+3. 准备好各种参数和指针
+
 ```c
+    // 先找到可执行文件
+    begin_op();
+
+    // Open the executable file.
+    if((ip = namei(path)) == 0){
+        end_op();
+        return -1;
+    }
+    ilock(ip);
+
+    // 读取ELF头
+    if(readi(ip, 0, (uint64)&elf, 0, sizeof(elf)) != sizeof(elf))
+        goto bad;
+
+    // 确认是ELF文件
+    if(elf.magic != ELF_MAGIC)
+        goto bad;   
+    
+    // 为进程分配页表
+    // 实际上之前的程序已经分配过一次页表
+    // 这里再分配一次 就像fork后使用exec一样
+    // 原来的页表也会销毁
+    if((pagetable = procPagetable(p)) == 0)
+        goto bad;
+
+
+    // 把程序加载到内存
+    // 反正我看不懂
+    for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
+        if(readi(ip, 0, (uint64)&ph, off, sizeof(ph)) != sizeof(ph))
+            goto bad;
+        if(ph.type != ELF_PROG_LOAD)
+            continue;
+        if(ph.memsz < ph.filesz)
+            goto bad;
+        if(ph.vaddr + ph.memsz < ph.vaddr)
+            goto bad;
+        if(ph.vaddr % PGSIZE != 0)
+            goto bad;
+        uint64 sz1;
+        if((sz1 = uVmAlloc(pagetable, sz, ph.vaddr + ph.memsz, flags2perm(ph.flags))) == 0)
+            goto bad;
+        sz = sz1;
+        if(loadseg(pagetable, ph.vaddr, ip, ph.off, ph.filesz) < 0)
+            goto bad;
+    }
+
+    // 这里复制完成了;
+    // 后面inode就不重要了 所以把它放回去
+    iunlock(ip);
+    iput(ip);
+    end_op();
+    ip = 0;
 ```
 
+这里为什么需要创建一个新的页表,然后把原来的页表给销毁掉呢?
+
+这个是为了适配`fork`的操作,`fork`出来的内容我们也是使用`exec()`来处理,把原来的空间彻底替换掉,使用其他的方式执行./
+
+这一段就是复制的部分,其中efi的复制比较复杂,可以跳过.
+
+然后就是将参数复制到栈中,也就是`argc`和`argv`来进行复制.
+
+```c
 
 
+    // 分配栈空间
+    sz = PGROUNDUP(sz);
+    uint64 sz1;
+    if((sz1 = uVmAlloc(pagetable, sz, sz + (USERSTACK+1)*PGSIZE, PTE_W)) == 0)
+        goto bad;
+    sz = sz1;
+    // 清空栈空间
+    uvmclear(pagetable, sz-(USERSTACK+1)*PGSIZE);
+    sp = sz;
+    stackbase = sp - USERSTACK*PGSIZE;
+```
 
+首先是复制参数本身的空间,同时将他们的指针复制到ustack中
 
-## `wait`与`exit` 实现父子进程通信
+```c
 
+    // 将参数复制到ustack上
+    for(argc = 0; argv[argc]; argc++) {
+    if(argc >= MAXARG)
+        goto bad;
+    sp -= strlen(argv[argc]) + 1;
+    sp -= sp % 16; // riscv sp must be 16-byte aligned
+    if(sp < stackbase)
+        goto bad;
+    if(copyout(pagetable, sp, argv[argc], strlen(argv[argc]) + 1) < 0)
+        goto bad;
+    ustack[argc] = sp;
+    }
+    ustack[argc] = 0;
+```
+
+然后将指针全部复制到栈中.
+
+```c
+
+  // push a copy of ustack[], the array of argv[] pointers.
+  sp -= (argc+1) * sizeof(uint64);
+  sp -= sp % 16;
+  if(sp < stackbase)
+    goto bad;
+  if(copyout(pagetable, sp, (char *)ustack, (argc+1)*sizeof(uint64)) < 0)
+    goto bad;
+```
+
+最后让函数的第一个参数指向这个参数指针列表即可:
+
+```c
+  // a0 and a1 contain arguments to user main(argc, argv)
+  // argc is returned via the system call return
+  // value, which goes in a0.
+  p->trapframe->a1 = sp;
+```
+
+然后是复制程序名字方便调试
+
+```c
+  // Save program name for debugging.
+  for(last=s=path; *s; s++)
+    if(*s == '/')
+      last = s+1;
+  safestrcpy(p->name, last, sizeof(p->name));
+    
+```
+
+最后,销毁原来的页表,并且准备新的寄存器:
+
+```c
+// Commit to the user image.
+  oldpagetable = p->pagetable;
+  p->pagetable = pagetable;
+  p->sz = sz;
+  p->trapframe->epc = elf.entry;  // initial program counter = ulib.c:start()
+  p->trapframe->sp = sp; // initial stack pointer
+  proc_freepagetable(oldpagetable, oldsz);
+
+  return argc; // this ends up in a0, the first argument to main(argc, argv)
+```
+
+由此一个原先的进程就变成了完全不相关的另一个进程.
+
+## 程序退出`exit`和进程回收`wait`
+
+### `exit`实现
+
+```c
+
+// Exit the current process.  Does not return.
+// An exited process remains in the zombie state
+// until its parent calls wait().
+void
+kexit(int status)
+{
+  struct proc *p = myproc();
+
+  if(p == initproc)
+    panic("init exiting");
+
+  // Close all open files.
+  for(int fd = 0; fd < NOFILE; fd++){
+    if(p->ofile[fd]){
+      struct file *f = p->ofile[fd];
+      fileclose(f);
+      p->ofile[fd] = 0;
+    }
+  }
+
+  begin_op();
+  iput(p->cwd);
+  end_op();
+  p->cwd = 0;
+
+  acquire(&wait_lock);
+
+  // Give any children to init.
+  reparent(p);
+
+  // Parent might be sleeping in wait().
+  wakeup(p->parent);
+  
+  acquire(&p->lock);
+
+  p->xstate = status;
+  p->state = ZOMBIE;
+
+  release(&wait_lock);
+
+  // Jump into the scheduler, never to return.
+  sched();
+  panic("zombie exit");
+}
+```
+
+这个函数的功能就是实现对所有进程的回收.
+
+首先关闭所有的文件
+
+```c
+// Close all open files.
+  for(int fd = 0; fd < NOFILE; fd++){
+    if(p->ofile[fd]){
+      struct file *f = p->ofile[fd];
+      fileclose(f);
+      p->ofile[fd] = 0;
+    }
+  }
+```
+
+接着,减少当前工作目录的引用:
+
+```c
+
+  begin_op();
+  iput(p->cwd);
+  end_op();
+  p->cwd = 0;
+```
+
+当一个进程死去后,他的所有子进程变成孤儿进程,所以需要全部归还给`initproc`
+
+```c
+  // Give any children to init.
+  reparent(p);
+```
+
+对应的代码如下:
+
+```c
+// Pass p's abandoned children to init.
+// Caller must hold wait_lock.
+void
+reparent(struct proc *p)
+{
+  struct proc *pp;
+
+  for(pp = proc; pp < &proc[NPROC]; pp++){
+    if(pp->parent == p){
+      pp->parent = initproc;
+      wakeup(initproc);
+    }
+  }
+}
+```
+
+因为初始进程会不停wait其他的进程,然后陷入休眠,这里就是通过这种方式唤醒`initproc`
+
+接着,叫醒当前进程的父进程:
+
+```c
+
+  // Parent might be sleeping in wait().
+  wakeup(p->parent);
+```
+
+因为当前进程的父进程可能还在wait当前进程返回.
+
+最后,设置退除状态和设置进程状态,执行调度,然后进程将不会再返回:
+
+```c
+
+  acquire(&p->lock);
+
+  p->xstate = status;
+  p->state = ZOMBIE;
+
+  release(&wait_lock);
+
+  // Jump into the scheduler, never to return.
+  sched();
+  panic("zombie exit");
+```
+
+### `wait`实现
+
+`wait`是一个回收的阻塞操作,他会不停检查自己的子进程,选择一个处于僵尸态的回收:
+
+```c
+
+// Wait for a child process to exit and return its pid.
+// Return -1 if this process has no children.
+int
+kwait(uint64 addr)
+{
+  struct proc *pp;
+  int havekids, pid;
+  struct proc *p = myproc();
+
+  acquire(&wait_lock);
+
+  for(;;){
+    // Scan through table looking for exited children.
+    havekids = 0;
+    for(pp = proc; pp < &proc[NPROC]; pp++){
+      if(pp->parent == p){
+        // make sure the child isn't still in exit() or swtch().
+        acquire(&pp->lock);
+
+        havekids = 1;
+        if(pp->state == ZOMBIE){
+          // Found one.
+          pid = pp->pid;
+          if(addr != 0 && copyout(p->pagetable, addr, (char *)&pp->xstate,
+                                  sizeof(pp->xstate)) < 0) {
+            release(&pp->lock);
+            release(&wait_lock);
+            return -1;
+          }
+          freeproc(pp);
+          release(&pp->lock);
+          release(&wait_lock);
+          return pid;
+        }
+        release(&pp->lock);
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if(!havekids || killed(p)){
+      release(&wait_lock);
+      return -1;
+    }
+    
+    // Wait for a child to exit.
+    sleep(p, &wait_lock);  //DOC: wait-sleep
+  }
+}
+```
+
+他的主体是一个大循环:
+
+```c
+for(;;){
+    // Scan through table looking for exited children.
+    havekids = 0;
+    for(pp = proc; pp < &proc[NPROC]; pp++){
+      if(pp->parent == p){
+        // make sure the child isn't still in exit() or swtch().
+          havekids = 1;
+         
+       // ..
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if(!havekids || killed(p)){
+      release(&wait_lock);
+      return -1;
+    }
+    
+    // Wait for a child to exit.
+    sleep(p, &wait_lock);  //DOC: wait-sleep
+  }
+```
+
+首先他会检查大循环中有没有自己的子进程,如果没有找到,那么`havekids`为0,就会杀死当前的进程(很符合逻辑).
+
+如果没有进程离开就会睡觉等待唤醒
+
+接着来看循环:
+
+```c
+for(pp = proc; pp < &proc[NPROC]; pp++){
+      if(pp->parent == p){
+        // make sure the child isn't still in exit() or swtch().
+        acquire(&pp->lock);
+
+        havekids = 1;
+        if(pp->state == ZOMBIE){
+          // Found one.
+          pid = pp->pid;
+          if(addr != 0 && copyout(p->pagetable, addr, (char *)&pp->xstate,sizeof(pp->xstate)) < 0) {
+            release(&pp->lock);
+            release(&wait_lock);
+            return -1;
+          }
+          freeproc(pp);
+          release(&pp->lock);
+          release(&wait_lock);
+          return pid;
+        }
+        release(&pp->lock);
+      }
+    }
+```
+
+如果找到了一个离开的子进程,那么就把退出状态复制到对应的`wait`的参数上,同时释放整个子进程的PCB;

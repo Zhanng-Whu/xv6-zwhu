@@ -9,6 +9,7 @@ struct context;
 struct buf;
 struct superblock;
 struct inode;
+struct file;
 
 // uart.c
 void uartinit();
@@ -62,17 +63,20 @@ void iput(struct inode* ip);
 void uvmclear(pagetable_t pagetable, uint64 va);
 void iunlock(struct inode* ip);
 struct inode* namei(char* path);
-
-
+struct inode* nameiparent(char* path, char* name);
+struct inode* idup(struct inode* ip);
 
 
 // file.c
 void fileinit(void);
+void fileclose(struct file* f);
+struct file* filedup(struct file* f);
 
 // vm.c
 uint64 uVA2PA(pagetable_t pagetable_t, uint64 va);
 uint64 vmfault(pagetable_t pagetable, uint64 va, int read);
 uint64 uVmAlloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm);
+int copyin(pagetable_t pagetable, char* dst, uint64 srcva, uint64 len);
 
 // 内核内存分配的辅助函数, 功能是实现从虚拟地址到物理地址的映射,并且根据perm设置页表项的权限
 // 是基于mapPages实现 但是要求不允许分配失败
@@ -118,8 +122,16 @@ void sched(void);
 int either_copyout(int user_dst, uint64 dst, void* src, uint64 len);
 pagetable_t procPagetable(struct PCB* p);
 int copyout(pagetable_t p, uint64 va, void* src, uint64 len);
+int copyinstr(pagetable_t pagetable, char* dst, uint64 srcva, uint64 max);
 void uFreeUserVM(pagetable_t pagetable, uint64 sz);
 void  prepare_return();
+int killed(struct PCB *p);
+void setkilled(struct PCB *p);
+int kkill(int pid);
+void kexit(int status);
+int kwait(uint64 addr);
+int uvmcopy(pagetable_t old, pagetable_t new, uint64 sz);
+int kfork(void);
 
 // exec.c
 // SHIT
@@ -192,6 +204,24 @@ void initlog(int dev, struct superblock* sb);
 void begin_op();
 void end_op();
 void log_write(struct buf* b);
+
+// syscall.c
+void syscall(void);
+void argint(int n, int *p);
+void argaddr(int n, uint64 *p); 
+int argstr(int n, char *buf, int max);
+int fetchstr(uint64 addr, char *buf, int max);
+int fetchaddr(uint64 addr, uint64 *ip);
+
+// sysproc.c
+uint64 sys_exit(void);
+uint64 sys_wait(void);
+uint64 sys_fork(void);
+uint64 sys_exec(void);
+
+
+// number of elements in fixed-size array
+#define NELEM(x) (sizeof(x)/sizeof((x)[0]))
 
 
 #endif

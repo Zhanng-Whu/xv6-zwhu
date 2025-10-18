@@ -22,6 +22,44 @@ extern char trampoline[]; // trampoline.S
 
 static int nextpid = 1;
 
+// 用于在内核态中 杀死进程
+void setkilled(struct PCB* p){
+  acquire(&p->lock);
+  p->killed = 1;
+  release(&p->lock);
+}
+
+int killed(struct PCB* p){
+  int k;
+  acquire(&p->lock);
+  k = p->killed;
+  release(&p->lock);
+  return k; 
+}
+
+// 用于实现系统调用
+int kkill(int pid){
+  struct PCB* pp;
+  for(pp = PCBs; pp < &PCBs[NPROC]; pp++){
+    acquire(&pp->lock);
+    if(pp->pid == pid){
+      pp->killed = 1;
+
+      // 只有在调度的时候 才能执行杀死进程的操作
+      // 具体从操作查看usertrap函数
+      if(pp->state == SLEEPING){
+        pp->state = RUNNABLE;
+      }
+      release(&pp->lock);
+      return 0;
+    }
+    release(&pp->lock);
+  }
+  return -1;
+
+}
+
+
 int cpuid() {
   int id = r_tp();
   return id;
@@ -77,7 +115,6 @@ void sleep(void* chan, struct spinlock* lk){
 
   p->chan = chan;
   p->state = SLEEPING;
-
   sched();
 
   p->chan = 0;
@@ -149,8 +186,10 @@ void sched(void){
 
   if(!holding(&p->lock))
     panic("sched p->lock");
-  if(mycpu()->noff != 1)
+  if(mycpu()->noff != 1){
+    printf("%d\n", mycpu()->noff);
     panic("sched locks");
+  }
   if(p->state == RUNNING)
     panic("sched RUNNING");
   if(intr_get())
@@ -252,7 +291,7 @@ void forkret(void){
     
 
     // 最牢的一句
-    p->trapframe->a0 = kexec("/test", (char *[]){ "/test", 0 });
+    p->trapframe->a0 = kexec("/waiter", (char *[]){ "/waiter", 0 });
     if (p->trapframe->a0 == -1) {
       panic("exec");
     } 
@@ -359,6 +398,45 @@ either_copyout(int user_dst, uint64 dst, void* src, uint64 len){
   }
 }
 
+
+int 
+copyinstr(pagetable_t pagetable, char* dst, uint64 srcva, uint64 max){
+  uint64 n, va0, pa0;
+  int got_null = 0;
+  while(got_null == 0 && max > 0){
+    va0 = PGROUNDDOWN(srcva);
+    pa0 = uVA2PA(pagetable, va0);
+    if(pa0 == 0)
+      return -1;
+    n = PGSIZE - (srcva - va0);
+    if(n > max)
+      n = max;
+
+    char *p = (char *) (pa0 + (srcva - va0));
+    while(n > 0){
+      if(*p == '\0'){
+        *dst = '\0';
+        got_null = 1;
+        break;
+      } else {
+        *dst = *p;
+      }
+      --n;
+      --max;
+      p++;
+      dst++;
+    }
+
+    srcva = va0 + PGSIZE;
+  }
+  if(got_null){
+    return 0;
+  } else {
+    return -1;
+  }
+}
+
+
 void 
 userinit(void){
   struct PCB* p;
@@ -380,4 +458,139 @@ userinit(void){
 
   release(&p->lock);
 
+}
+void reparent(struct PCB *p){
+  struct PCB* pp;
+
+  for(pp = PCBs; pp < &PCBs[NPROC]; pp++){
+    if(pp->parent == p){
+      pp->parent = initproc;
+      wakeup(initproc);
+    }
+  }
+}
+
+void
+kexit(int status){
+  struct PCB* p = myproc();
+
+  acquire(&p->lock);
+
+  // 关闭所有打开的文件
+  for(int fd = 0; fd < NOFILE; fd++){
+    if(p->ofile[fd]){
+      fileclose(p->ofile[fd]);
+      p->ofile[fd] = 0;
+    }
+  }
+
+  begin_op();
+  iput(p->cwd);
+  end_op();
+  p->cwd = 0;
+
+  acquire(&wait_lock);
+
+  reparent(p);
+
+  wakeup(p->parent);
+
+
+  p->xstate = status;
+  p->state = ZOMBIE;
+
+  release(&wait_lock);
+
+  sched();
+  panic("kexit 不可能出错的出错");
+}
+
+
+// 将退出的状态码传递给父进程
+// 这个地址就是这里的addr
+int kwait(uint64 addr){
+  struct PCB* pp;
+  int havekids, pid;
+  struct PCB* p = myproc(); 
+
+  acquire(&wait_lock);
+  for(;;){
+    havekids = 0;
+
+    for(pp = PCBs; pp < &PCBs[NPROC]; pp++){
+
+
+      if(pp->parent == p){
+        acquire(&pp->lock);
+        havekids = 1;
+        
+        if(pp->state == ZOMBIE){
+          pid = pp->pid;
+          if(addr != 0 && copyout(p->pagetable, addr, (char*)&pp->xstate,
+                                  sizeof(pp->xstate)) < 0){
+            release(&pp->lock);
+            release(&wait_lock);
+            return -1;
+          }
+          uFreeProc(pp);
+          release(&pp->lock);
+          release(&wait_lock);
+          return pid;
+        }
+      release(&pp->lock); 
+      }
+    }
+    // 如果没有孩子 并且当前进程被杀死 那么直接返回 -1
+    if(havekids == 0 || killed(p)){
+      release(&wait_lock);
+      return -1;
+    }
+
+    // 睡大觉
+    sleep(p, &wait_lock);
+  }
+}
+
+// 这位更是重量级
+int 
+kfork(void){
+  int i, pid;
+  struct PCB *np;
+  if((np = allocproc()) == 0){
+    return -1;
+  }
+
+  // 复制父进程的用户内存空间到子进程
+  if(uvmcopy(myproc()->pagetable, np->pagetable, myproc()->sz) < 0){
+    uFreeProc(np);
+    release(&np->lock);
+    return -1;
+  }
+
+  np->sz = myproc()->sz;
+
+  *(np->trapframe) = *(myproc()->trapframe);
+  np->trapframe->a0 = 0;
+
+  for(i = 0; i < NOFILE; i++){
+    if(myproc()->ofile[i]){
+      np->ofile[i] = filedup(myproc()->ofile[i]);
+    }
+  }
+  
+  np->cwd = idup(myproc()->cwd);
+
+  safestrcpy(np->name, myproc()->name, sizeof(myproc()->name));
+
+  pid = np->pid;
+  release(&np->lock);
+
+  acquire(&wait_lock);
+  np->parent = myproc();
+  release(&wait_lock);
+
+  acquire(&np->lock);
+  np->state = RUNNABLE;
+  release(&np->lock);
+  return pid;
 }

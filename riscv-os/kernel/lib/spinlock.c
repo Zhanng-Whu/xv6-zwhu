@@ -24,6 +24,7 @@ initlock(struct spinlock* lk, char* name){
 
 void 
 acquire(struct spinlock* lk){
+    
     push_off(); // 关闭中断 避免死锁
     if(holding(lk))
         panic("acquire");
@@ -41,8 +42,12 @@ acquire(struct spinlock* lk){
 }
 
 void release(struct spinlock* lk){
-    if(!holding(lk))
-        panic("release");
+    if(!holding(lk)){
+      printf("进程号 : %d\n", mycpu()->proc->pid);
+      printf("%s\n", lk->name);
+      panic("release");
+
+    }
 
     lk->cpu = 0;
 

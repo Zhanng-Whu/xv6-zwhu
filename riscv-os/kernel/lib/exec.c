@@ -129,15 +129,15 @@ int kexec(char* path, char ** argv){
 
     // 将参数复制到ustack上
     for(argc = 0; argv[argc]; argc++) {
-    if(argc >= MAXARG)
-        goto bad;
-    sp -= strlen(argv[argc]) + 1;
-    sp -= sp % 16; // riscv sp must be 16-byte aligned
-    if(sp < stackbase)
-        goto bad;
-    if(copyout(pagetable, sp, argv[argc], strlen(argv[argc]) + 1) < 0)
-        goto bad;
-    ustack[argc] = sp;
+        if(argc >= MAXARG)
+            goto bad;
+        sp -= strlen(argv[argc]) + 1;
+        sp -= sp % 16; // riscv sp must be 16-byte aligned
+        if(sp < stackbase)
+            goto bad;
+        if(copyout(pagetable, sp, argv[argc], strlen(argv[argc]) + 1) < 0)
+            goto bad;
+        ustack[argc] = sp;
     }
     ustack[argc] = 0;
 

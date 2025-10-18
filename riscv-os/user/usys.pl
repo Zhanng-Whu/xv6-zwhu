@@ -21,3 +21,9 @@ sub entry {
     print " ret\n";
 }
 	
+
+entry("hello");
+entry("exit");  
+entry("fork");
+entry("wait");
+entry("exec");

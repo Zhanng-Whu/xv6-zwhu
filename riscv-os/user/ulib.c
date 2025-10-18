@@ -9,9 +9,10 @@
 void
 start(int argc, char **argv)
 {
+  int r;
   extern int main(int argc, char **argv);
-    main(argc, argv);
+  r = main(argc, argv);
 
-  for(;;);
-  
+
+  exit(r);
 }
