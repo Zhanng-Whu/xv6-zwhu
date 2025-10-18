@@ -237,11 +237,12 @@ sys_write(void)
   int n;
   uint64 p;
 
-  argaddr(1, &p);
-  argint(2, &n);
-  if(argfd(0, 0, &f) < 0)
-    return -1;
-
+    argaddr(1, &p);
+    argint(2, &n);
+    if(argfd(0, 0, &f) < 0)
+        return -1;
+    if(p <= 0)
+        return -1;
   return filewrite(f, p, n);
 }
 
@@ -258,4 +259,14 @@ sys_read(void){
         return -1;
 
     return fileread(f, p, n);
+}
+
+uint64 sys_close(){
+    int fd;
+    struct file* f; 
+    if(argfd(0, &fd, &f) < 0)
+        return -1;  
+    myproc()->ofile[fd] = 0;
+    fileclose(f);
+    return 0;
 }

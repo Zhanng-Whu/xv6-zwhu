@@ -27,6 +27,10 @@ uint64
 sys_fork(void){
     return kfork();
 }
+uint64
+sys_getpid(void){
+  return myproc()->pid;
+}
 
 uint64
 sys_exec(void)

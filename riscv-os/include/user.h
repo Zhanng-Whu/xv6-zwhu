@@ -13,6 +13,8 @@ int     dup(int fd);
 int     mknod(char *path, short major, short minor);
 int     write(int fd, const void *buf, int n);
 int     read(int fd, void *buf, int n);
+int     close(int fd);
+int     getpid(void);
 
 // ulib.c
 void start(int argc, char **argv);

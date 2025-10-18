@@ -24,10 +24,12 @@ initlock(struct spinlock* lk, char* name){
 
 void 
 acquire(struct spinlock* lk){
-    
+
     push_off(); // 关闭中断 避免死锁
-    if(holding(lk))
+    if(holding(lk)){
+        uart_puts(lk->name);
         panic("acquire");
+    }
 
     // RISC-V的sync_lock_test_and_set会变成一个原子交换操作
     // a5 = 1

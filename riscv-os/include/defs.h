@@ -228,7 +228,7 @@ uint64 sys_exit(void);
 uint64 sys_wait(void);
 uint64 sys_fork(void);
 uint64 sys_exec(void);
-
+uint64 sys_getpid(void);
 
 // sysfile.c
 uint64 sys_mknod(void);
@@ -236,6 +236,7 @@ uint64 sys_open(void);
 uint64 sys_dup(void);
 uint64 sys_write(void);
 uint64 sys_read(void);
+uint64 sys_close(void);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

@@ -2,6 +2,7 @@
 #include "include/types.h"
 #include "include/riscv.h"
 #include "include/defs.h"
+#include "include/proc.h"
 #include "include/spinlock.h"
 #include "include/memlayout.h"
 
@@ -228,7 +229,7 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len){
     pa0 = uVA2PA(pagetable, va0);
 
     if(pa0 == 0) {
-      if((pa0 = vmfault(pagetable, va0, 1)) == 0) {
+      if((pa0 = vmfault(pagetable, va0, 0)) == 0) {
         return -1;
       }
     }
@@ -268,7 +269,8 @@ uint64
 vmfault(pagetable_t pagetable, uint64 va, int read){
     uint64 mem;
 
-    if(va >= MAXVA)
+     struct PCB *p = myproc();
+    if(va >= p->sz)
         return 0;
     
     va = PGROUNDDOWN(va);
@@ -282,7 +284,7 @@ vmfault(pagetable_t pagetable, uint64 va, int read){
         return 0;
     
     memset((void*)mem, 0, PGSIZE);
-    if(mapPages(pagetable, va, PGSIZE, mem, PTE_W|PTE_U|PTE_R) != 0){
+    if(mapPages(p->pagetable, va, PGSIZE, mem, PTE_W|PTE_U|PTE_R) != 0){
         kfree((void*)mem);
         return 0;
     }
@@ -440,4 +442,45 @@ uVmDealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz){
     }
     
     return newsz;
+}
+
+
+ /**
+ * @brief 检查一个用户虚拟地址范围是否合法、已映射且有足够权限。
+ * @param user_va 要检查的用户虚拟地址的起始点。
+ * @param size    要检查的内存区域的大小（字节）。
+ * @param is_write  如果需要写权限，则为1；否则为0。
+ * @return 成功返回0，失败返回-1。
+ */
+int
+checkUserPtr(uint64 userva, uint64 size, int is_write){
+  struct PCB *p = myproc();
+  uint64 start_va = userva;
+  uint64 end_va = userva + size;
+
+  // 先检查传入的参数
+  if (end_va < start_va)
+    return -1;
+  if (end_va > p->sz || end_va > MAXVA)
+    return -1;
+
+
+  // 通过页表逐个检查
+  for (uint64 va = PGROUNDDOWN(start_va); va < end_va; va += PGSIZE) {
+    pte_t *pte = walk(p->pagetable, va, 0);
+
+    if (pte == 0)
+      return -1; // 页面未映射
+
+    // 页面无效或者用户不可访问
+    if ((*pte & PTE_V) == 0 || (*pte & PTE_U) == 0)
+      return -1; // 页面无效或用户不可访问
+
+    // 检查是否可写
+    if (is_write && (*pte & PTE_W) == 0)
+      return -1; // 页面不可写
+  }
+
+  // 所有检查都通过
+  return 0;
 }

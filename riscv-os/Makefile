@@ -108,6 +108,7 @@ mkfs/mkfs: mkfs/mkfs.c $I/fs.h $I/param.h
 UPROGS= \
 	$U/_test \
 	$U/_waiter \
+	$U/_usertest \
 
 fs.img: mkfs/mkfs  $(UPROGS)
 	mkfs/mkfs fs.img $(UPROGS)

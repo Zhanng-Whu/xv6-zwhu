@@ -50,3 +50,13 @@ read:
  li a7, SYS_read
  ecall
  ret
+.global close
+close:
+ li a7, SYS_close
+ ecall
+ ret
+.global getpid
+getpid:
+ li a7, SYS_getpid
+ ecall
+ ret

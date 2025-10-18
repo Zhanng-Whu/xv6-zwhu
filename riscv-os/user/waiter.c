@@ -30,15 +30,16 @@ void fdinit(){
     dup(0); // stderr
 }
 
-char *argv1[] = { "test", "argv1", 0 };
+
+
 int main(){
 
     fdinit();
-    
+
 
     int pid = fork();
     if(pid == 0){
-        exec("test", argv1);
+        exec("usertest", (char *[]){"usertest", 0});
         exit(1);
     }
 

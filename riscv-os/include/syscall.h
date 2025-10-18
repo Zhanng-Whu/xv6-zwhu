@@ -8,3 +8,5 @@
 #define     SYS_mknod   8
 #define     SYS_write   9
 #define     SYS_read    10
+#define     SYS_close   11
+#define     SYS_getpid  12

@@ -32,3 +32,5 @@ entry("open");
 entry("mknod");
 entry("write");
 entry("read");
+entry("close");
+entry("getpid");

@@ -491,7 +491,6 @@ void
 kexit(int status){
   struct PCB* p = myproc();
 
-  acquire(&p->lock);
 
   // 关闭所有打开的文件
   for(int fd = 0; fd < NOFILE; fd++){
@@ -512,6 +511,7 @@ kexit(int status){
 
   wakeup(p->parent);
 
+  acquire(&p->lock);
 
   p->xstate = status;
   p->state = ZOMBIE;
