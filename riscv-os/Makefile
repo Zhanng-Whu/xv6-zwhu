@@ -76,7 +76,7 @@ tags: $(KSRCS_C) $(KSRCS_S) $(I)/*.h
 	etags $(KSRCS_C) $(KSRCS_S) $(I)/*.h
 
 
-ULIB = $U/ulib.o $U/usys.o 
+ULIB = $U/ulib.o $U/usys.o $U/printf.o
 
 _%: %.o $(ULIB) $U/user.ld
 	$(LD) $(LDFLAGS) -T $U/user.ld -o $@ $< $(ULIB)

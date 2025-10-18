@@ -17,4 +17,6 @@ int     read(int fd, void *buf, int n);
 // ulib.c
 void start(int argc, char **argv);
 
-
+// printf.c
+void printf(const char *fmt, ...);
+void fprintf(int fd, const char *fmt, ...);

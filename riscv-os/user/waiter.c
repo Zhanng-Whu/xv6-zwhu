@@ -14,22 +14,27 @@ void foreverwait(){
     for(;;){
         int wpid = wait((int *)0);
         if(wpid < 0){
-            hello();
             exit(1);
         }
     }
 }
 
+void fdinit(){
+    
+    if(open("console", O_RDWR) < 0){
+        // 如果没有console设备 那么创建一个
+        mknod("console", CONSOLE, 0);
+        open("console", O_RDWR);
+    }
+    dup(0); // stdout
+    dup(0); // stderr
+}
 
 char *argv1[] = { "test", "argv1", 0 };
 int main(){
 
-    if(open("console", 0) < 0){
-        // 如果没有console设备 那么创建一个
-        hello();
-        mknod("console", CONSOLE, 0);
-        open("console", 0);
-    }
+    fdinit();
+    
 
     int pid = fork();
     if(pid == 0){

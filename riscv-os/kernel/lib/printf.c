@@ -15,8 +15,6 @@ static struct{
     struct spinlock lock;
 } pr;
 
-
-
 // base是进制 sign表示是否有符号
 static void
 printint(long long xx, int base ,int sign){
