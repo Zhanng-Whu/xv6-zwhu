@@ -1,5 +1,10 @@
-#define SYS_hello 1
-#define SYS_exit 2
-#define SYS_wait 3
-#define SYS_fork 4  
-#define SYS_exec 5
+#define     SYS_hello   1
+#define     SYS_exit    2
+#define     SYS_wait    3
+#define     SYS_fork    4   
+#define     SYS_exec    5
+#define     SYS_open    6
+#define     SYS_dup     7
+#define     SYS_mknod   8
+
+

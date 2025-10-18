@@ -135,7 +135,9 @@ bmap(struct inode* ip, uint bn){
         // 然后从二级页表中读取对应的块号
         // 如果没有分配就分配一个新的块号
         bp = bread(ip->dev, addr);
-        a = (uint*)bp->data;
+        a = (uint*)bp;
+    // 根据写回的值 更新一下ip
+    // 在bmap的过程中 ip的addr会被相应的修改->data;
         if((addr = a[bn]) == 0){
         addr = balloc(ip->dev);
         if(addr){
@@ -348,6 +350,45 @@ readi(struct inode* ip, int user_dst, uint64 dst, uint off, uint n){
     return tot;
 }
 
+// 从src的内核地址开始 根据偏移量off 写入n个字节的内容
+int 
+writei(struct inode* ip, int user_dst, uint64 src, uint off, uint n){
+    uint tot, m;
+    struct buf* bp;
+
+    // 超出范围 则返回错误值
+    if(off > ip->size || off + n < off)
+        return -1;
+    if(off + n > MAXFILE * BSIZE)
+        return -1;
+
+    // 关键在于需要按照块来进行填写        
+    for(tot = 0; tot < n; tot += m, src += m, off += m){
+        
+        // 获取当前块对应的偏移
+        uint addr = bmap(ip, off / BSIZE);
+        if(addr == 0)
+            break;
+        bp = bread(ip->dev, addr);
+        m = min(n - tot, BSIZE - off % BSIZE);
+        if(either_copyin(bp->data + (off %BSIZE), user_dst, src, m) == -1){
+            brelse(bp);
+            break;
+        }
+        log_write(bp);
+        brelse(bp);
+    }
+    // 修改文件大小
+    if(off > ip->size)
+        ip->size = off;
+    
+    // 根据写回的值 更新一下ip
+    // 在bmap的过程中 ip的addr会被相应的修改 根据写入的情况
+    // 相应扩充addr
+    iupdate(ip);
+
+    return tot;
+}
 
 // 在当前目录inode下搜索name对应的文件
 // 并且返回对应的inode和偏移量
@@ -434,9 +475,6 @@ fsinit(int dev){
     ireclaim(dev);
 }
 
-
-
-
 static struct inode*
 namex(char* path, int nameiparent, char* name){
     struct inode* ip, *next;
@@ -495,4 +533,63 @@ namei(char* path){
 struct inode*
 nameiparent(char* path, char* name){
     return namex(path, 1, name);
+}
+
+
+// 检查bitmap 找到一个空闲的inode
+// 把它拿出来
+struct inode*
+ialloc(uint dev, short type){
+    int inum;
+    struct buf* bp;
+    struct dinode* dip;
+
+    for(inum = 1; inum < sb.ninodes; inum++){
+        bp = bread(dev, IBLOCK(inum, sb));
+        dip = (struct dinode*)bp->data + inum % IPB;
+
+        if(dip->type == 0){ // a free inode
+            memset(dip, 0, sizeof(*dip));
+            dip->type = type;
+            log_write(bp); // mark it allocated on the disk
+            brelse(bp);
+            return iget(dev, inum);
+        }
+        brelse(bp);
+    }
+    printf("ialloc: disk上找不到对应的inode\n");
+    return 0;
+
+
+}
+
+int 
+dirlink(struct inode* dp, char* name, uint inum){
+    int off;
+    struct dirent de;
+    struct inode* ip;
+
+    // 先获取当前当前目录下的是否有这个文件
+    if((ip = dirlookup(dp, name, 0)) != 0){
+        iput(ip);
+        return -1;
+    }
+
+    // 找到一个空闲的目录项 因为目录是顺序存储的 如果之前有释放的目录项
+    // 那么目录前面就会有空闲的目录项
+    for(off = 0; off < dp->size; off += sizeof(de)){
+        if(readi(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+            panic("dirlink read");
+        if(de.inum == 0)
+            break;
+    }
+    safestrcpy(de.name, name, DIRSIZ);
+    de.inum = inum;
+
+    // 向目录项写入 根据前面得到的偏移量
+    if(writei(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+        return -1;
+
+   return 0;
+
 }

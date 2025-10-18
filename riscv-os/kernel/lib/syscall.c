@@ -79,6 +79,9 @@ static uint64 (*syscalls[])(void) = {
 [SYS_wait]     sys_wait,
 [SYS_fork]     sys_fork,
 [SYS_exec]     sys_exec,
+[SYS_open]     sys_open,
+[SYS_dup]      sys_dup,
+[SYS_mknod]    sys_mknod,
 };
 
 

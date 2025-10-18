@@ -1,6 +1,10 @@
 #ifndef FILE_H
 #define FILE_H
 
+
+#include "include/spinlock.h"
+#include "include/sleeplock.h"
+
 // file是基于进程层面的实现
 // file的是由进程的文件描述符实现的
 // 并且由系统的打开文件表 ftable 管理
@@ -38,6 +42,7 @@ struct devsw{
     int (*read)(int, uint64, int);
     int (*write)(int, uint64, int);
 };
-
+extern struct devsw devsw[];
+#define CONSOLE 1
 
 #endif

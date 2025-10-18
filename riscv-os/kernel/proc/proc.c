@@ -387,6 +387,10 @@ int copyout(pagetable_t pagetable, uint64 va, void* src, uint64 len){
   return 0;
 }
 
+// 根据user_dst 来判断是从内核复制到内核还是
+// 从内核复制到与用户空间
+// 后面的两个参数 表示数据来源 
+// 复制到dst, 长度为len
 int 
 either_copyout(int user_dst, uint64 dst, void* src, uint64 len){
   struct PCB* p = myproc();
@@ -397,6 +401,19 @@ either_copyout(int user_dst, uint64 dst, void* src, uint64 len){
     return 0;
   }
 }
+
+int 
+either_copyin(void* dst, int user_src, uint64 src, uint64 len){
+  struct PCB* p = myproc();
+
+  if(user_src){
+    return copyin(p->pagetable, dst, src, len);
+  }else{
+    memmove(dst, (char*) src, len);
+    return 0;
+  }
+}
+
 
 
 int 

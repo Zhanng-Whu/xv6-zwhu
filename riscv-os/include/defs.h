@@ -58,6 +58,7 @@ void bwrite(struct buf* b);
 void iinit(void);
 void fsinit(int dev);
 int readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n);
+int writei(struct inode* ip, int user_dst, uint64 src, uint off, uint n);
 void ilock(struct inode* ip);
 void iput(struct inode* ip);
 void uvmclear(pagetable_t pagetable, uint64 va);
@@ -65,12 +66,19 @@ void iunlock(struct inode* ip);
 struct inode* namei(char* path);
 struct inode* nameiparent(char* path, char* name);
 struct inode* idup(struct inode* ip);
+struct inode* dirlookup(struct inode *dp, char *name, uint *poff);
+struct inode* ialloc(uint dev, short type);
+void iupdate(struct inode* ip);
+int dirlink(struct inode* dp, char* name, uint inum);
+void itrunc(struct inode* ip);
 
 
 // file.c
 void fileinit(void);
 void fileclose(struct file* f);
 struct file* filedup(struct file* f);
+struct file* filealloc(void);
+
 
 // vm.c
 uint64 uVA2PA(pagetable_t pagetable_t, uint64 va);
@@ -120,6 +128,7 @@ void sleep(void* chan, struct spinlock* lk);
 void wakeup(void* chan);
 void sched(void);
 int either_copyout(int user_dst, uint64 dst, void* src, uint64 len);
+int either_copyin(void* dst, int user_src, uint64 src, uint64 len);
 pagetable_t procPagetable(struct PCB* p);
 int copyout(pagetable_t p, uint64 va, void* src, uint64 len);
 int copyinstr(pagetable_t pagetable, char* dst, uint64 srcva, uint64 max);
@@ -219,6 +228,11 @@ uint64 sys_wait(void);
 uint64 sys_fork(void);
 uint64 sys_exec(void);
 
+
+// sysfile.c
+uint64 sys_mknod(void);
+uint64 sys_open(void);
+uint64 sys_dup(void);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

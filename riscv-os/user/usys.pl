@@ -27,3 +27,6 @@ entry("exit");
 entry("fork");
 entry("wait");
 entry("exec");
+entry("dup");
+entry("open");
+entry("mknod");

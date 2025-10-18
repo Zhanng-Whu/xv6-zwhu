@@ -119,3 +119,33 @@ exec:
   6e:	00000073          	ecall
  ret
   72:	8082                	ret
+
+0000000000000074 <dup>:
+.global dup
+dup:
+ li a7, SYS_dup
+  74:	489d                	li	a7,7
+ ecall
+  76:	00000073          	ecall
+ ret
+  7a:	8082                	ret
+
+000000000000007c <open>:
+.global open
+open:
+ li a7, SYS_open
+  7c:	4899                	li	a7,6
+ ecall
+  7e:	00000073          	ecall
+ ret
+  82:	8082                	ret
+
+0000000000000084 <mknod>:
+.global mknod
+mknod:
+ li a7, SYS_mknod
+  84:	48a1                	li	a7,8
+ ecall
+  86:	00000073          	ecall
+ ret
+  8a:	8082                	ret
