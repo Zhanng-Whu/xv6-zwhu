@@ -149,3 +149,23 @@ mknod:
   86:	00000073          	ecall
  ret
   8a:	8082                	ret
+
+000000000000008c <write>:
+.global write
+write:
+ li a7, SYS_write
+  8c:	48a5                	li	a7,9
+ ecall
+  8e:	00000073          	ecall
+ ret
+  92:	8082                	ret
+
+0000000000000094 <read>:
+.global read
+read:
+ li a7, SYS_read
+  94:	48a9                	li	a7,10
+ ecall
+  96:	00000073          	ecall
+ ret
+  9a:	8082                	ret

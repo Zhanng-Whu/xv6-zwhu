@@ -30,3 +30,5 @@ entry("exec");
 entry("dup");
 entry("open");
 entry("mknod");
+entry("write");
+entry("read");

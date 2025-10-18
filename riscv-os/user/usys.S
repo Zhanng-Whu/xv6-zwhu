@@ -40,3 +40,13 @@ mknod:
  li a7, SYS_mknod
  ecall
  ret
+.global write
+write:
+ li a7, SYS_write
+ ecall
+ ret
+.global read
+read:
+ li a7, SYS_read
+ ecall
+ ret

@@ -82,6 +82,8 @@ static uint64 (*syscalls[])(void) = {
 [SYS_open]     sys_open,
 [SYS_dup]      sys_dup,
 [SYS_mknod]    sys_mknod,
+[SYS_write]    sys_write,
+[SYS_read]     sys_read,
 };
 
 

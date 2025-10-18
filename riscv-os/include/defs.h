@@ -37,7 +37,6 @@ void virtio_disk_intr(void);
     void initlock(struct spinlock* lk, char* name);
     void acquire(struct spinlock* lk);
     void release(struct spinlock* lk);
-
     int holding(struct spinlock* lk);
 
 // sleeplock.c
@@ -78,6 +77,8 @@ void fileinit(void);
 void fileclose(struct file* f);
 struct file* filedup(struct file* f);
 struct file* filealloc(void);
+int filewrite(struct file* f, uint64 addr, int n);
+int fileread(struct file* f, uint64 addr, int n);
 
 
 // vm.c
@@ -233,6 +234,8 @@ uint64 sys_exec(void);
 uint64 sys_mknod(void);
 uint64 sys_open(void);
 uint64 sys_dup(void);
+uint64 sys_write(void);
+uint64 sys_read(void);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

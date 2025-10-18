@@ -42,7 +42,7 @@ int main(){
     if(open("console", 0) < 0){
   24:	4581                	li	a1,0
   26:	00000517          	auipc	a0,0x0
-  2a:	0aa50513          	add	a0,a0,170 # d0 <mknod+0xa>
+  2a:	0ba50513          	add	a0,a0,186 # e0 <read+0xa>
   2e:	090000ef          	jal	be <open>
   32:	02054263          	bltz	a0,56 <main+0x3a>
         hello();
@@ -58,7 +58,7 @@ int main(){
   3c:	00001597          	auipc	a1,0x1
   40:	fc458593          	add	a1,a1,-60 # 1000 <argv1>
   44:	00000517          	auipc	a0,0x0
-  48:	09450513          	add	a0,a0,148 # d8 <mknod+0x12>
+  48:	0a450513          	add	a0,a0,164 # e8 <read+0x12>
   4c:	062000ef          	jal	ae <exec>
         exit(1);
   50:	4505                	li	a0,1
@@ -69,12 +69,12 @@ int main(){
   5a:	4601                	li	a2,0
   5c:	4585                	li	a1,1
   5e:	00000517          	auipc	a0,0x0
-  62:	07250513          	add	a0,a0,114 # d0 <mknod+0xa>
+  62:	08250513          	add	a0,a0,130 # e0 <read+0xa>
   66:	060000ef          	jal	c6 <mknod>
         open("console", 0);
   6a:	4581                	li	a1,0
   6c:	00000517          	auipc	a0,0x0
-  70:	06450513          	add	a0,a0,100 # d0 <mknod+0xa>
+  70:	07450513          	add	a0,a0,116 # e0 <read+0xa>
   74:	04a000ef          	jal	be <open>
   78:	bf7d                	j	36 <main+0x1a>
     }
@@ -183,3 +183,23 @@ mknod:
   c8:	00000073          	ecall
  ret
   cc:	8082                	ret
+
+00000000000000ce <write>:
+.global write
+write:
+ li a7, SYS_write
+  ce:	48a5                	li	a7,9
+ ecall
+  d0:	00000073          	ecall
+ ret
+  d4:	8082                	ret
+
+00000000000000d6 <read>:
+.global read
+read:
+ li a7, SYS_read
+  d6:	48a9                	li	a7,10
+ ecall
+  d8:	00000073          	ecall
+ ret
+  dc:	8082                	ret

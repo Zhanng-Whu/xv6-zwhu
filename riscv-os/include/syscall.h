@@ -6,5 +6,5 @@
 #define     SYS_open    6
 #define     SYS_dup     7
 #define     SYS_mknod   8
-
-
+#define     SYS_write   9
+#define     SYS_read    10

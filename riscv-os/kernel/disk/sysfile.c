@@ -230,3 +230,32 @@ sys_open(void){
 
 }
 
+uint64
+sys_write(void)
+{
+  struct file *f;
+  int n;
+  uint64 p;
+  
+  argaddr(1, &p);
+  argint(2, &n);
+  if(argfd(0, 0, &f) < 0)
+    return -1;
+
+  return filewrite(f, p, n);
+}
+
+// fd void* src int len
+uint64
+sys_read(void){
+    struct file* f;
+    int n;
+    uint64 p;
+    argfd(0,0, &f);
+    argaddr(1, &p);
+    argint(2, &n);
+    if(f < 0)
+        return -1;
+
+    return fileread(f, p, n);
+}
