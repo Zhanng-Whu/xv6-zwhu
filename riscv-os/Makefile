@@ -110,8 +110,11 @@ UPROGS= \
 	$U/_waiter \
 	$U/_usertest \
 	$U/_filetest \
+<<<<<<< HEAD
 	$U/_prioritytest \
 	$U/_cowtest \
+=======
+>>>>>>> parent of 4565b58 (<feat>:<优先级调度>)
 
 fs.img: mkfs/mkfs  $(UPROGS)
 	mkfs/mkfs fs.img $(UPROGS)
