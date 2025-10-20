@@ -468,14 +468,14 @@ userinit(void){
   // 是整个文件系统的核心接口之一
   p->cwd = namei("/");
 
-  printf("Test124\n\n\n");
   p->state = RUNNABLE;
-
-
 
   release(&p->lock);
 
 }
+
+
+
 void reparent(struct PCB *p){
   struct PCB* pp;
 

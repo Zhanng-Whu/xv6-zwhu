@@ -85,6 +85,8 @@ static uint64 (*syscalls[])(void) = {
 [SYS_write]    sys_write,
 [SYS_read]     sys_read,
 [SYS_unlink]   sys_unlink,
+[SYS_close]    sys_close,
+[SYS_uptime]   sys_uptime,
 };
 
 
@@ -94,6 +96,8 @@ syscall(void){
     struct PCB* p = myproc();
 
     num = p->trapframe->a7;
+
+
     if(num > 0 && num < NELEM(syscalls) && syscalls[num]){
         p->trapframe->a0 = syscalls[num]();
     } else {

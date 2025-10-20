@@ -33,7 +33,8 @@
     "numeric": "c",
     "core": "c",
     "complex": "c",
-    "syscall.h": "c"
+    "syscall.h": "c",
+    "fstream": "c"
   },
   "C_Cpp_Runner.cCompilerPath": "gcc",
   "C_Cpp_Runner.cppCompilerPath": "g++",

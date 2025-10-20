@@ -65,3 +65,8 @@ unlink:
  li a7, SYS_unlink
  ecall
  ret
+.global uptime
+uptime:
+ li a7, SYS_uptime
+ ecall
+ ret

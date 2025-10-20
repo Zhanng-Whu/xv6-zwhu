@@ -64,6 +64,7 @@ void uart_putc(char c){
     WriteReg(THR, c);
 }
 
+
 void uart_puts(char *s){
     char* tmp = s;
     while(*s){

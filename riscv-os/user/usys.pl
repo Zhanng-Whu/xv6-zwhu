@@ -35,3 +35,4 @@ entry("read");
 entry("close");
 entry("getpid");
 entry("unlink");
+entry("uptime");

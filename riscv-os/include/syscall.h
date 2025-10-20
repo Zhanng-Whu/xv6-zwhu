@@ -11,4 +11,5 @@
 #define     SYS_close   11
 #define     SYS_getpid  12
 #define     SYS_unlink  13
+#define     SYS_uptime  14
 

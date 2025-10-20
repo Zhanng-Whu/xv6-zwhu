@@ -16,6 +16,20 @@ sys_exit(void){
     return 0;
 }
 
+
+extern int ticks;
+extern struct spinlock tickslock;
+
+uint64
+sys_uptime(void){
+  acquire(&tickslock);
+  int x = ticks;
+  release(&tickslock);
+
+  return x;
+
+}
+
 uint64
 sys_wait(void){
     uint64 p;

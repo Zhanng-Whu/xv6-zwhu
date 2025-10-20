@@ -55,9 +55,9 @@ void test_read_and_write(void){
 void
 test_concurrent_access_with_array(void)
 {
-  printf("Testing concurrent file access (using pre-defined array)...\n");
+  printf("开始filesystem并发访问测试\n");
 
-  int num_procs = 3; // 测试将创建10个子进程
+  int num_procs = 10; // 测试将创建10个子进程
   int i;
   int pid;
 
@@ -67,6 +67,13 @@ test_concurrent_access_with_array(void)
     "test_0",
     "test_1",
     "test_2",
+    "test_3",
+    "test_4",
+    "test_5",
+    "test_6",
+    "test_7",
+    "test_8",
+    "test_9",
   };
 
   // 创建多个进程同时访问文件系统
@@ -104,10 +111,83 @@ test_concurrent_access_with_array(void)
     }
   }
 
+  for(i = 0; i < num_procs; i++) {
+    int wpid = wait(0);
+    if (wpid < 0) {
+      printf("wait failed\n");
+      exit(1);
+    }
+  }
+  printf("并发测试结束，所有子进程已完成。\n");
+
 }
+
+void
+test_filesystem_performance(void)
+{
+  printf("文件IO性能测试\n");
+  
+  uint start_time;
+  int fd, i;
+  
+  // --- 大量小文件测试 ---
+  printf("开始小文件测试 (1000 个文件)...\n");
+  start_time = uptime();
+
+  for (i = 0; i < 1000; i++) {
+    char filename[32];
+    strcpy(filename, "small_");
+    itoa(i, filename + strlen(filename));
+    
+    fd = open(filename, O_CREATE | O_WRONLY);
+    if (fd < 0) {
+      printf("performance test: open small file failed\n");
+      exit(1);
+    }
+    if (write(fd, "test", 4) != 4) {
+      printf("performance test: write small file failed\n");
+      exit(1);
+    }
+    close(fd);
+  }
+
+  uint small_files_time = uptime() - start_time;
+
+  // --- 大文件测试 ---
+  printf("开始大文件测试 (1 个 4MB 文件)...\n");
+  char large_buffer[4096]; // 4KB buffer
+  start_time = uptime();
+
+  fd = open("large_file", O_CREATE | O_WRONLY);
+  if (fd < 0) {
+    printf("performance test: open large file failed\n");
+    exit(1);
+  }
+  for (i = 0; i < 1024; i++) { // 1024 * 4KB = 4MB
+    if (write(fd, large_buffer, sizeof(large_buffer)) != sizeof(large_buffer)) {
+      printf("performance test: write large file failed\n");
+      exit(1);
+    }
+  }
+  close(fd);
+
+  uint large_file_time = uptime() - start_time;
+
+  // --- 打印结果 ---
+  printf("\n 性能测试结果 \n");
+  // 中文输出
+  printf("小文件 (1000x4B) 耗时: %d ticks\n", small_files_time);
+  printf("大文件 (1x4MB) 耗时:    %d ticks\n", large_file_time);
+
+  unlink("large_file");
+
+  printf("测试 3 成功完成。\n");
+}
+
+
 int main(int argc, char const *argv[])
 {
-    test_read_and_write();
-    test_concurrent_access_with_array();
+
+    test_filesystem_performance();
     return 0;
 }

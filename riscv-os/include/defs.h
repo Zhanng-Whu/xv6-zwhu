@@ -229,6 +229,7 @@ uint64 sys_wait(void);
 uint64 sys_fork(void);
 uint64 sys_exec(void);
 uint64 sys_getpid(void);
+uint64 sys_uptime(void);
 
 // sysfile.c
 uint64 sys_mknod(void);

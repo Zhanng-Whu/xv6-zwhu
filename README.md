@@ -1,3 +1,4 @@
+## 启动
 防止环境混乱，这里使用Docker帮助构建环境，镜像基于ubuntu:22.04构建。
 ```shell
 docker pull zwhu/riscv:base
@@ -14,7 +15,7 @@ docker run -it --rm \
 --ipc=host \
 --pid=host \
 --privileged \
---dns=8.8.8.8 \
+--dns=8.8.8.8 
 -v /tmp/.X11-unix:/tmp/.X11-unix \
 -e DISPLAY=$DISPLAY \
 -v $HOME/.Xauthority:/root/.Xauthority:ro \
@@ -47,7 +48,7 @@ ps:qemu的版本问题可能与国内源有关，可以选择使用源码编译 
 
 
 
-
+## 阅读笔记 
 [阅读第一讲](docs/chapter1.md), 其完整代码储存在fork,boot中。
 
 [阅读第二讲](docs/chapter2.md), 代码在printf分支中。
@@ -60,6 +61,18 @@ ps:qemu的版本问题可能与国内源有关，可以选择使用源码编译 
 
 [阅读第五六章](docs/chapter5&6.md), 系统调用的原理过于简单, 直接放在这里了, 而且`fork`和`exec`补做出来第五章基本没有
 
-
-
+## 分支说明
+除`main`分支外,其他的从上到下基本为衍生关系
+- main 最新的分支
+- boot 实现基本的进入系统
+- printf 实现串口操作和console的操作
+- bss 一个用于验证bss清空的分支
+- kalloc 实现了物理分配
+- vm 实现了虚拟地址
+- trap 实现了时钟中断
+- userinit 实现了跳转用户态
+- syscall 实现了系统调用
+- usertest 完成用户态测试代码
+- filetest 完成文件系统测试代码
+- priority 实现静态多级反馈队列
 

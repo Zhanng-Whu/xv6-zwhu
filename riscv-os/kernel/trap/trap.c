@@ -6,12 +6,13 @@
 #include <include/proc.h>
 #include <include/defs.h>
 
+struct spinlock tickslock;
 
 // 中断向量
 void kernelVec();
 
 void trapInit(void){
-    // do nothing   
+  initlock(&tickslock, "time");
 }
 
 
@@ -65,8 +66,18 @@ prepare_return(void)
   w_sepc(p->trapframe->epc);
 }
 
+int ticks = 0;
+
 void 
 clockIntr(){
+
+  if(cpuid() == 0){
+    acquire(&tickslock);
+    ticks++;
+    wakeup(&ticks);
+    release(&tickslock);
+  }
+
 
   // ask for the next timer interrupt. this also clears
   // the interrupt request. 1000000 is about a tenth
@@ -86,7 +97,6 @@ int devIntr(){
       printf("串口中断\n");
     } else if(irq == VIRTIO0_IRQ){
       virtio_disk_intr();
-      printf("磁盘中断\n"); 
     } else if(irq){
       printf("未知中断号 irq=%d\n", irq);
     }

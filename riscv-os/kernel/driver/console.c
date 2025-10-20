@@ -41,7 +41,7 @@ consolewrite(int user_src, uint64 src, int n){
         if(either_copyin(buf, user_src, src + i, nn) == -1)
             break;
 
-        // 基于阻塞实现
+        // 基于阻塞实现串口输出
         for(int j = 0; j < nn; j++)
             uartputc_sync(buf[j]);
         i += nn;
