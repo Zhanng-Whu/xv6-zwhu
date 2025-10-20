@@ -74,19 +74,21 @@ sys_hello(void){
 }
 
 static uint64 (*syscalls[])(void) = {
-[SYS_hello]    sys_hello,
-[SYS_exit]     sys_exit,
-[SYS_wait]     sys_wait,
-[SYS_fork]     sys_fork,
-[SYS_exec]     sys_exec,
-[SYS_open]     sys_open,
-[SYS_dup]      sys_dup,
-[SYS_mknod]    sys_mknod,
-[SYS_write]    sys_write,
-[SYS_read]     sys_read,
-[SYS_unlink]   sys_unlink,
-[SYS_close]    sys_close,
-[SYS_uptime]   sys_uptime,
+[SYS_hello]         sys_hello,
+[SYS_exit]          sys_exit,
+[SYS_wait]          sys_wait,
+[SYS_fork]          sys_fork,
+[SYS_exec]          sys_exec,
+[SYS_open]          sys_open,
+[SYS_dup]           sys_dup,
+[SYS_mknod]         sys_mknod,
+[SYS_write]         sys_write,
+[SYS_read]          sys_read,
+[SYS_unlink]        sys_unlink,
+[SYS_close]         sys_close,
+[SYS_uptime]        sys_uptime,
+[SYS_getpid]        sys_getpid,
+[SYS_set_priority]  sys_set_priority,
 };
 
 

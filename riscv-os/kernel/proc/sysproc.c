@@ -15,7 +15,13 @@ sys_exit(void){
     kexit(n);
     return 0;
 }
-
+uint64
+sys_set_priority(void){
+    int pid, priority;
+    argint(0, &pid);
+    argint(1, &priority);
+    return set_priority(pid, priority);
+}
 
 extern int ticks;
 extern struct spinlock tickslock;

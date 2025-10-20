@@ -144,7 +144,7 @@ void kexit(int status);
 int kwait(uint64 addr);
 int uvmcopy(pagetable_t old, pagetable_t new, uint64 sz);
 int kfork(void);
-
+int set_priority(int pid, int priority);
 // exec.c
 // SHIT
 int kexec(char* path, char ** argv);
@@ -232,7 +232,7 @@ uint64 sys_fork(void);
 uint64 sys_exec(void);
 uint64 sys_getpid(void);
 uint64 sys_uptime(void);
-
+uint64 sys_set_priority(void);
 // sysfile.c
 uint64 sys_mknod(void);
 uint64 sys_open(void);

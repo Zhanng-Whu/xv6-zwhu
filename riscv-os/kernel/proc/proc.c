@@ -11,7 +11,127 @@ struct cpu cpus[NCPU];
 struct PCB PCBs[NPROC];
 
 struct PCB* initproc;
+struct spinlock plock; // 用于调度器的锁
 
+struct queue_t{
+  int size;
+  struct PCB* proc[NPROC];
+  int priority;
+} queue_t;
+
+
+struct queue_t queues1;
+struct queue_t queues2;
+struct queue_t queues3;
+struct queue_t queues4;
+
+void pqueue_init(struct queue_t* q, int priority){
+  q->size = 0;
+  q->priority = priority;
+  for(int i = 0; i < NPROC; i++){
+    q->proc[i] = 0;
+  }
+}
+
+void enqueue(struct queue_t* q, struct PCB* p){
+  int pos;
+  printf("proc %d enqueueing %d.\n", p->pid, q->priority);
+  acquire(&plock);
+  pos = q->size - 1;
+  while(pos >= 0 && q->proc[pos]->pid > p->pid){
+    q->proc[pos + 1] = q->proc[pos];
+    pos--;
+  }
+  q->proc[pos + 1] = p;
+  q->size++;
+  release(&plock);
+}
+
+void
+removeq(struct queue_t* q, struct PCB *p)
+{
+   int pos;
+   int found = 0;
+  printf("removing %d from q: %d\n",p->pid, q->priority);
+   acquire(&plock);
+   pos = 0;
+   while(pos < q->size){
+      if(q->proc[pos]==p){   //从前往后，找到该进程
+          found=1;
+          break;
+      }
+      else{
+        pos++;
+      }
+   }
+   if(found){   //若找到，此时pos指向要删除的进程
+      while(pos < q->size-1){    //从 pos 到倒数第二个进程位置
+            q->proc[pos] = q->proc[pos+1];  //将所有进程往前挪一个位置
+            pos++;
+      }
+      q->proc[q->size-1] = 0;
+      q->size --;
+    }
+  release(&plock);
+}
+
+struct PCB*
+headq(struct queue_t* q)
+{
+    struct PCB* p = 0;
+    int pos;
+    acquire(&plock);
+    for(pos = 0; pos < q->size; pos++){
+      if(q->proc[pos]->state == RUNNABLE){    //找到第一个RUNNABLE进程，注意等待队列是从到达时间小到大排序的
+        p = q->proc[pos];
+        break;
+      }
+    }
+    release(&plock);
+
+    return p;
+}
+
+void 
+pinit(void){
+
+  initlock(&plock, "proc lock");
+
+  pqueue_init(&queues1, 1);
+  pqueue_init(&queues2, 2);
+  pqueue_init(&queues3, 3);
+  pqueue_init(&queues4, 4);
+}
+
+int
+set_priority(int pid, int priority){
+  struct PCB* p;
+  for(p = PCBs; p < &PCBs[NPROC]; p++){
+    if(p->pid == pid){
+      if(p->priority != priority){
+        printf("设置进程 %d 优先级 从 %d 到 %d\n", pid, p->priority, priority);
+        switch (p->priority){
+        case 1: removeq(&queues1, p);break;
+        case 2: removeq(&queues2, p);break;
+        case 3: removeq(&queues3, p);break;
+        case 4: removeq(&queues4, p);break;
+        default:
+          break;
+        }
+        switch(priority){
+          case 1: enqueue(&queues1, p); break;
+          case 2: enqueue(&queues2, p); break;
+          case 3: enqueue(&queues3, p); break;
+          case 4: enqueue(&queues4, p); break;
+          default : break;
+        }
+        p->priority = priority;
+        return 0;
+      }   
+    } 
+  }   
+  return -1;
+}
 
 // 用于PID分配的锁
 struct spinlock pid_lock;
@@ -143,6 +263,9 @@ procinit(void){
 
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
+  
+  // 调度初始化
+  pinit();
 
   for(p = PCBs; p < &PCBs[NPROC]; p++){
     initlock(&p->lock, "proc");
@@ -160,19 +283,23 @@ void scheduler(void){
     intr_on();
     intr_off();
   
-    int found = 0 ;
-    for(p = PCBs; p < &PCBs[NPROC]; p++){
+
+    
+    p = headq(&queues1);
+    if(p == 0) p = headq(&queues2);
+    if(p == 0) p = headq(&queues3);
+    if(p == 0) p = headq(&queues4);
+
+    if(p){
       acquire(&p->lock);
-      if(p->state == RUNNABLE){
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
-        c->proc = 0;
-        found = 1;
-      } 
+      printf("调度进程 %d 优先级 %d\n", p->pid, p->priority);
+       p->state = RUNNING;
+      c->proc = p;
+      swtch(&c->context, &p->context);
+      c->proc = 0; 
       release(&p->lock);
     }
-    if(found == 0){
+    if(p == 0){
       asm volatile("wfi");
     }
   }
@@ -460,7 +587,8 @@ userinit(void){
 
   p = allocproc();
   initproc = p;
-
+  p->priority = 2;
+  enqueue(&queues2, p);
   // 这里的cwd是一个inode 
   // 就是指向当前的工作目录的inode
   // 具体实现很麻烦 但是比较重要
@@ -549,6 +677,15 @@ int kwait(uint64 addr){
             release(&wait_lock);
             return -1;
           }
+
+           switch (pp->priority)
+          {
+            case 1: removeq(&queues1, pp); break;
+            case 2: removeq(&queues2, pp); break;  
+            case 3: removeq(&queues3, pp); break;
+            case 4: removeq(&queues4, pp); break;
+            default: break;
+          }
           uFreeProc(pp);
           release(&pp->lock);
           release(&wait_lock);
@@ -596,7 +733,16 @@ kfork(void){
   }
   
   np->cwd = idup(myproc()->cwd);
+ np->priority = myproc()->priority;
 
+  switch (np->priority)
+  {
+  case 1: enqueue(&queues1, np); break;
+  case 2: enqueue(&queues2, np); break;
+  case 3: enqueue(&queues3, np); break;
+  case 4: enqueue(&queues4, np); break;
+  default: panic("未知优先度");break;
+  }
   safestrcpy(np->name, myproc()->name, sizeof(myproc()->name));
 
   pid = np->pid;

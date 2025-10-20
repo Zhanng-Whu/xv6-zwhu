@@ -92,6 +92,7 @@ struct PCB{
   void* chan;                  // 进程睡眠的等待chan
   int xstate;                  // 进程退出状态
   uint64 sz;                   // 进程内存大小
+  int priority;
 
   // 文件系统
   struct file *ofile[NOFILE];  // 打开的文件

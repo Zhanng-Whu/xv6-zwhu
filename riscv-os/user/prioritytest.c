@@ -6,7 +6,6 @@
 
 int main(int argc, char const *argv[])
 {
-    
     int forknumber=atoi(argv[1]);
     int status;
 
@@ -19,9 +18,9 @@ int main(int argc, char const *argv[])
         }
         if(status==0){
 	    	for(int count=0;count<40; count++){
-		    	for(int k=0;k<1000;k++){
+		    	for(int k=0;k<10000;k++){
 					int result=0;
-					for( int j=0; j<500; j++){
+					for( int j=0; j<5000; j++){
 			    		result+=j*j;
                         result-=j*j;
                         result= result/j;

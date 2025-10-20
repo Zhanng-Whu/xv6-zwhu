@@ -144,49 +144,6 @@ void kernelTrap(void){
   w_sstatus(sstatus);
 }
 
-int iscow_page(pagetable_t pagetable, uint64 va){
-  
-  if(va >= MAXVA)
-      return 0;
-    
-  pte_t* pte = walk(pagetable, va, 0);
-  if(pte == 0)
-      return 0;
-  if((*pte & PTE_V) == 0)
-    return 0;
-  if((*pte & PTE_U) == 0)
-    return 0;
-  return ((*pte) & PTE_COW); // 有 PTE_C 的代表还没复制过，并且是 cow 页
-  return 0;
-}
-
-int cowalloc(pagetable_t pagetable, uint64 va){
-  pte_t* pte = walk(pagetable, va, 0);
-  uint64 newpage;
-  if(pte == 0)return -1;
-  uint64 perm = PTE_FLAGS(*pte);
-
-  uint64 prev_sta = PTE2PA(*pte);
-
-  if((newpage = (uint64)kalloc()) == 0) return -1;
-  va = PGROUNDDOWN(va);
-  perm &= ~PTE_COW;
-  perm |= PTE_W;
-
-  memmove((void*)newpage, (void*)prev_sta, PGSIZE);
-  // 放弃原来的映射
-  
-  uVmUnmap(pagetable, va, 1, 1);
-
-  printf("COW : 解除va 0x%x到pa: 0x%x, 现在这一页的计数为:%d\n", va, prev_sta, get_refcnt((void*)prev_sta));
-  // 建立新的映射
-  if(mapPages(pagetable, va, PGSIZE, newpage, perm) < 0){
-    kfree((void*)newpage);
-    return -1;
-  }
-  return 0;
-
-}
 
 uint64
 usertrap(void){
@@ -208,12 +165,9 @@ usertrap(void){
     syscall(); 
   } else if((which_dev = devIntr()) != 0){
     // ok
-  } else if((r_scause() == 15 || r_scause() == 13)){
-    if(iscow_page(p->pagetable, r_stval())){
-      if(cowalloc(p->pagetable, r_stval()) < 0){
-        setkilled(p);
-      }
-    }
+  } else if((r_scause() == 15 || r_scause() == 13) &&
+            vmfault(p->pagetable, r_stval(), (r_scause() == 13)? 1 : 0) != 0) {
+              printf("处理缺页异常成功\n");
     // page fault on lazily-allocated page
   } else {
     printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
