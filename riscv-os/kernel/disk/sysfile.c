@@ -243,7 +243,7 @@ sys_write(void)
         return -1;
     if(p <= 0)
         return -1;
-  return filewrite(f, p, n);
+    return filewrite(f, p, n);
 }
 
 // fd void* src int len

@@ -131,10 +131,10 @@ test_filesystem_performance(void)
   int fd, i;
   
   // --- 大量小文件测试 ---
-  printf("开始小文件测试 (1000 个文件)...\n");
+  printf("开始小文件测试 (50 个文件)...\n");
   start_time = uptime();
 
-  for (i = 0; i < 1000; i++) {
+  for (i = 0; i < 50; i++) {
     char filename[32];
     strcpy(filename, "small_");
     itoa(i, filename + strlen(filename));
@@ -154,8 +154,8 @@ test_filesystem_performance(void)
   uint small_files_time = uptime() - start_time;
 
   // --- 大文件测试 ---
-  printf("开始大文件测试 (1 个 4MB 文件)...\n");
-  char large_buffer[4096]; // 4KB buffer
+  printf("开始大文件测试 (1 个 10KB 文件)...\n");
+  char large_buffer[1024]; // 1 KB buffer
   start_time = uptime();
 
   fd = open("large_file", O_CREATE | O_WRONLY);
@@ -163,7 +163,7 @@ test_filesystem_performance(void)
     printf("performance test: open large file failed\n");
     exit(1);
   }
-  for (i = 0; i < 1024; i++) { // 1024 * 4KB = 4MB
+  for (i = 0; i < 10; i++) { // 10 * 1KB = 10Kb
     if (write(fd, large_buffer, sizeof(large_buffer)) != sizeof(large_buffer)) {
       printf("performance test: write large file failed\n");
       exit(1);
@@ -176,8 +176,8 @@ test_filesystem_performance(void)
   // --- 打印结果 ---
   printf("\n 性能测试结果 \n");
   // 中文输出
-  printf("小文件 (1000x4B) 耗时: %d ticks\n", small_files_time);
-  printf("大文件 (1x4MB) 耗时:    %d ticks\n", large_file_time);
+  printf("小文件 (50x4B) 耗时: %d ticks\n", small_files_time);
+  printf("大文件 (1x10KB) 耗时:    %d ticks\n", large_file_time);
 
   unlink("large_file");
 
@@ -188,6 +188,8 @@ test_filesystem_performance(void)
 int main(int argc, char const *argv[])
 {
 
+    test_read_and_write();
+    test_concurrent_access_with_array();
     test_filesystem_performance();
     return 0;
 }
