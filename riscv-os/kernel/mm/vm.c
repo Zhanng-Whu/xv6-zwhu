@@ -333,6 +333,7 @@ void uVmUnmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
         if(do_free){
             uint64 pa = PTE2PA(*pte);
             kfree((void*)pa);
+            printf("uVmUnmap: 释放va 0x%x对应的物理地址0x%x, 现在的计数为%d\n", a, pa, get_refcnt((void*)pa));
         }
         *pte = 0;
     }
@@ -371,12 +372,12 @@ uVmFree(pagetable_t pagetable, uint64 sz)
   freePgtbl(pagetable);
 }
 
+
 int 
 uvmcopy(pagetable_t old, pagetable_t new, uint64 sz){
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -384,14 +385,19 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz){
     if((*pte & PTE_V) == 0)
       continue;   // 物理页没有被分配
     pa = PTE2PA(*pte);
+
+    *pte &= (~PTE_W);
+    *pte |= PTE_COW;
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mapPages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    // if((mem = kalloc()) == 0)
+    //   goto err;
+    // memmove(mem, (char*)pa, PGSIZE);
+    if(mapPages(new, i, PGSIZE, (uint64)pa, flags) != 0){
+      panic("uvmcopy : COW失败");
       goto err;
     }
+    refcnt_inc((void* )pa);
+    printf("uvmcopy: 复制了va 0x%x pa 0x%x, 计数为%d\n", i, pa, get_refcnt((void*)pa));
   }
   return 0;
 

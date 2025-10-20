@@ -86,6 +86,8 @@ uint64 uVA2PA(pagetable_t pagetable_t, uint64 va);
 uint64 vmfault(pagetable_t pagetable, uint64 va, int read);
 uint64 uVmAlloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm);
 int copyin(pagetable_t pagetable, char* dst, uint64 srcva, uint64 len);
+int iscow_page(pagetable_t pagetable, uint64 va);
+int cowalloc(pagetable_t pagetable, uint64 va);
 
 // 内核内存分配的辅助函数, 功能是实现从虚拟地址到物理地址的映射,并且根据perm设置页表项的权限
 // 是基于mapPages实现 但是要求不允许分配失败
@@ -162,6 +164,8 @@ void goto_xy(int x, int y);
 void kinit(void);
 void kfree(void*);
 void* kalloc(void);
+void refcnt_inc(void* pa);
+int get_refcnt(void* pa);
 
 // buddy.c
 struct list{
