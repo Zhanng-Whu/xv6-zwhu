@@ -14,7 +14,10 @@ void foreverwait(){
     for(;;){
         int wpid = wait((int *)0);
         if(wpid < 0){
+            printf("进程1离开\n");
             exit(1);
+        }else{
+            printf("清理了孤儿进程 %d\n", wpid);
         }
     }
 }
@@ -39,7 +42,7 @@ int main(){
 
     int pid = fork();
     if(pid == 0){
-        exec("filetest", (char *[]){"filetest", 0});
+        exec("prioritytest", (char *[]){"prioritytest", "8", 0});
         exit(1);
     }
 

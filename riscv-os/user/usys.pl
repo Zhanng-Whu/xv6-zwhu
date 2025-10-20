@@ -36,3 +36,4 @@ entry("close");
 entry("getpid");
 entry("unlink");
 entry("uptime");
+entry("set_priority");

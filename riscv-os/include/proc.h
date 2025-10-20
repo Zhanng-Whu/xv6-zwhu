@@ -93,6 +93,9 @@ struct PCB{
   int xstate;                  // 进程退出状态
   uint64 sz;                   // 进程内存大小
 
+  // 调度优先级
+  int priority;
+
   // 文件系统
   struct file *ofile[NOFILE];  // 打开的文件
   struct inode *cwd;           // 当前目录
