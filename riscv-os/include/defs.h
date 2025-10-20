@@ -163,8 +163,6 @@ void goto_xy(int x, int y);
 void kinit(void);
 void kfree(void*);
 void* kalloc(void);
-void refcnt_inc(void* pa);
-int get_refcnt(void* pa);
 
 // buddy.c
 struct list{
