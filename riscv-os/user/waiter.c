@@ -42,7 +42,7 @@ int main(){
 
     int pid = fork();
     if(pid == 0){
-        exec("prioritytest", (char *[]){"prioritytest", "8", 0});
+        exec("cowtest", (char *[]){"cowtest", 0});
         exit(1);
     }
 
