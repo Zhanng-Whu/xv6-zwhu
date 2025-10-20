@@ -361,11 +361,7 @@ int copyout(pagetable_t pagetable, uint64 va, void* src, uint64 len){
     va0 = PGROUNDDOWN(va);
     if(va0 >= MAXVA)
       return -1;
-    if(iscow_page(pagetable, va0)){
-      printf("copyout: 遇到COW页面 va 0x%x\n", va0);
-      cowalloc(pagetable, va0);
-    }
-
+    
     // 获取物理地址
     pa0 = uVA2PA(pagetable, va0);
     if(pa0 == 0){
