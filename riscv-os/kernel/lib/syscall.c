@@ -84,6 +84,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_mknod]    sys_mknod,
 [SYS_write]    sys_write,
 [SYS_read]     sys_read,
+[SYS_unlink]   sys_unlink,
 };
 
 

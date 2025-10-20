@@ -39,7 +39,7 @@ int main(){
 
     int pid = fork();
     if(pid == 0){
-        exec("usertest", (char *[]){"usertest", 0});
+        exec("filetest", (char *[]){"filetest", 0});
         exit(1);
     }
 

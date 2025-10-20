@@ -15,6 +15,8 @@ int     write(int fd, const void *buf, int n);
 int     read(int fd, void *buf, int n);
 int     close(int fd);
 int     getpid(void);
+int     unlink(char *path);
+
 
 // ulib.c
 void start(int argc, char **argv);

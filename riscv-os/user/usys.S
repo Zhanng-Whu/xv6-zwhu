@@ -60,3 +60,8 @@ getpid:
  li a7, SYS_getpid
  ecall
  ret
+.global unlink
+unlink:
+ li a7, SYS_unlink
+ ecall
+ ret

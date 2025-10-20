@@ -10,3 +10,5 @@
 #define     SYS_read    10
 #define     SYS_close   11
 #define     SYS_getpid  12
+#define     SYS_unlink  13
+

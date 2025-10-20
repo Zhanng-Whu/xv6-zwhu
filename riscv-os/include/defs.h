@@ -205,7 +205,7 @@ int log2(uint64 x);
 void* memset(void *dst, int c, uint n);
 void* memmove(void* dst, const void * src, uint n);
 int memcmp(const void *v1, const void *v2, uint n);
-char* strncmp(const char *p, const char *q, uint n);
+int strncmp(const char *p, const char *q, uint n);
 int strlen(const char *s);
 char* safestrcpy(char *s, const char *t, int n);
 
@@ -237,6 +237,7 @@ uint64 sys_dup(void);
 uint64 sys_write(void);
 uint64 sys_read(void);
 uint64 sys_close(void);
+uint64 sys_unlink(void);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

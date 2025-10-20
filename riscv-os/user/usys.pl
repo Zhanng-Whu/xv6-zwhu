@@ -34,3 +34,4 @@ entry("write");
 entry("read");
 entry("close");
 entry("getpid");
+entry("unlink");
